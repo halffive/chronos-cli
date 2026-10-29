@@ -1,0 +1,4 @@
+Error: Request body failed validation.
+  delivery.http.url: "delivery.http.url" must be a valid uri
+  (request): "value" must have at least 1 key
+Request ID: req_test
