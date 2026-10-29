@@ -24,7 +24,7 @@ vuln:
 	go run $(GOVULNCHECK) ./...
 
 no-replace:
-	@if go mod edit -json | grep -q '"Replace"'; then echo "go.mod must not contain replace directives"; exit 1; fi
+	@if grep -Eq '^[[:space:]]*replace([[:space:]]|\()' go.mod; then echo "go.mod must not contain replace directives"; exit 1; fi
 
 cover:
 	go test -coverprofile=coverage.out ./...
