@@ -1,0 +1,15 @@
+chronos exits with one of these codes. With --json, the error object on stderr
+also has a "code" string and a "retryable" boolean, which is true when
+running the same command again is safe.
+
+  0    Success, including --dry-run.
+  1    Any other failure.
+  2    Bad flags or arguments, or a confirmation that needs --yes.
+  3    The resource does not exist.
+  4    No usable API key, or the API rejected it.
+  5    The API rejected the request for validation, a conflict or a plan limit. Read error.code.
+  6    Safe to run again: rate limited, a read that failed, or a write that never left this machine.
+  7    A write failed after it may have reached the API. Check its state before running the command again.
+  8    The job you waited for failed, was cancelled or was skipped.
+  9    The wait ended before the job finished. Continue with chronos jobs wait <id>.
+  130  Interrupted by Ctrl-C or SIGTERM.
