@@ -96,8 +96,9 @@ func encodeIndented(w io.Writer, v any) error {
 }
 
 // Clean makes text from the API safe to print on a terminal: control and
-// bidi characters other than newline and tab show as \xNN or \uNNNN instead
-// of being interpreted, so a crafted name cannot hide or reorder output.
+// bidi characters other than newline and tab show as \xNN, \uNNNN or
+// \UNNNNNNNN instead of being interpreted, so a crafted name cannot hide or
+// reorder output.
 func Clean(s string) string {
 	if !strings.ContainsFunc(s, isUnsafe) {
 		return s
@@ -109,8 +110,10 @@ func Clean(s string) string {
 			b.WriteRune(r)
 		case r <= 0xff:
 			fmt.Fprintf(&b, `\x%02x`, r)
-		default:
+		case r <= 0xffff:
 			fmt.Fprintf(&b, `\u%04x`, r)
+		default:
+			fmt.Fprintf(&b, `\U%08x`, r)
 		}
 	}
 	return b.String()

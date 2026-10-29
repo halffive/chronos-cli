@@ -192,8 +192,10 @@ func TestJSONTextKeepsLargeIntegersAndHTML(t *testing.T) {
 }
 
 func TestCleanEscapesBidiAndKeepsErrorsOnOneLine(t *testing.T) {
-	if got := output.Clean("prod\u202eod"); got != `prod\u202eod` {
-		t.Errorf("Clean = %q", got)
+	for in, want := range map[string]string{"prod\u202eod": `prod\u202eod`, "a\U0001D1733": `a\U0001d1733`} {
+		if got := output.Clean(in); got != want {
+			t.Errorf("Clean(%q) = %q, want %q", in, got, want)
+		}
 	}
 	var errOut bytes.Buffer
 	p := &output.Printer{Out: &errOut, Err: &errOut}
