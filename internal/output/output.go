@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"net/url"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf16"
 
 	"chronos.sh/cli/internal/exit"
 )
@@ -25,7 +27,8 @@ type Printer struct {
 	// JSON prints JSON on Out and keeps Err for JSON errors only.
 	JSON bool
 	// TTY is true when Out is a terminal.
-	TTY bool
+	TTY    bool
+	ErrTTY bool
 	// Color colors status values on Out.
 	Color bool
 	// Width is the terminal width, or 0 when unknown.
@@ -48,11 +51,39 @@ func (p *Printer) Print(v View) error {
 }
 
 // PrintJSON writes v to Out, indented on a terminal and compact otherwise.
+// On a terminal it also escapes the characters Clean escapes, which
+// encoding/json leaves raw.
 func (p *Printer) PrintJSON(v any) error {
-	if p.TTY {
-		return encodeIndented(p.Out, v)
+	if !p.TTY {
+		return encodeCompact(p.Out, v)
 	}
-	return encodeCompact(p.Out, v)
+	var b strings.Builder
+	if err := encodeIndented(&b, v); err != nil {
+		return err
+	}
+	_, err := io.WriteString(p.Out, escapeUnsafe(b.String()))
+	return err
+}
+
+// escapeUnsafe relies on unsafe characters occurring only inside JSON strings,
+// where \uXXXX decodes to the same text.
+func escapeUnsafe(encoded string) string {
+	if !strings.ContainsFunc(encoded, isUnsafe) {
+		return encoded
+	}
+	var b strings.Builder
+	for _, r := range encoded {
+		if !isUnsafe(r) {
+			b.WriteRune(r)
+			continue
+		}
+		if r1, r2 := utf16.EncodeRune(r); r1 != unicode.ReplacementChar {
+			fmt.Fprintf(&b, `\u%04x\u%04x`, r1, r2)
+			continue
+		}
+		fmt.Fprintf(&b, `\u%04x`, r)
+	}
+	return b.String()
 }
 
 // Note prints a message for a person on Err. Notes are dropped with --json,
@@ -66,7 +97,13 @@ func (p *Printer) Note(format string, args ...any) {
 
 func (p *Printer) Error(o exit.Outcome) {
 	if p.JSON {
-		encodeCompact(p.Err, map[string]exit.Outcome{"error": o})
+		var b strings.Builder
+		encodeCompact(&b, map[string]exit.Outcome{"error": o})
+		text := b.String()
+		if p.ErrTTY {
+			text = escapeUnsafe(text)
+		}
+		io.WriteString(p.Err, text)
 		return
 	}
 	fmt.Fprintf(p.Err, "Error: %s\n", CleanLine(exit.Sentence(o.Message)))
@@ -225,6 +262,24 @@ func JSONText(v any) string {
 }
 
 const Masked = "••••"
+
+// RedactedURL hides the password in a URL such as https://user:pw@host/. A URL
+// with no readable host that contains an @ may still hold one, so it returns
+// Masked.
+func RedactedURL(s string) string {
+	u, err := url.Parse(s)
+	unreadable := err != nil || u.Host == ""
+	if unreadable && strings.Contains(s, "@") {
+		return Masked
+	}
+	if unreadable {
+		return s
+	}
+	if _, ok := u.User.Password(); !ok {
+		return s
+	}
+	return u.Redacted()
+}
 
 // MaskedHeaders lists header names with their values hidden, since push
 // headers often carry credentials.

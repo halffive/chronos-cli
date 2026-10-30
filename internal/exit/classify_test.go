@@ -68,3 +68,16 @@ func TestRedirectOnAReadIsNotRetryable(t *testing.T) {
 		t.Errorf("Classify = %+v", got)
 	}
 }
+
+func TestWithMessageKeepsTheAPIOutcome(t *testing.T) {
+	for apiCode, want := range map[string]string{"invalid_api_key": "invalid_api_key", "": exit.CodeError} {
+		apiErr := &chronos.APIError{StatusCode: 401, Code: chronos.ErrorCode(apiCode), Message: "Unauthorized", RequestID: "req_1"}
+		got := exit.Classify(exit.WithMessage(apiErr, "The API rejected your saved key."), exit.Sent{LastMethod: "GET"})
+		if got.Exit != exit.Auth || got.Code != want || got.Message != "The API rejected your saved key." {
+			t.Errorf("Classify = exit %d, code %q, message %q; want %d %q and the new message", got.Exit, got.Code, got.Message, exit.Auth, want)
+		}
+		if got.Status == nil || *got.Status != 401 || got.RequestID == nil || *got.RequestID != "req_1" {
+			t.Errorf("status and request id were dropped: %+v", got)
+		}
+	}
+}

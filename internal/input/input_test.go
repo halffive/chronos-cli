@@ -35,6 +35,20 @@ func TestParseInterval(t *testing.T) {
 	}
 }
 
+func TestFormatInterval(t *testing.T) {
+	tests := map[chronos.Interval]string{
+		{Value: 30, Unit: chronos.IntervalUnitSecond}: "30s",
+		{Value: 5, Unit: chronos.IntervalUnitMinute}:  "5m",
+		{Value: 1, Unit: chronos.IntervalUnitWeek}:    "1w",
+		{Value: 2, Unit: "fortnight"}:                 "2 fortnight",
+	}
+	for in, want := range tests {
+		if got := input.FormatInterval(in); got != want {
+			t.Errorf("FormatInterval(%+v) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestParseSeconds(t *testing.T) {
 	tests := map[string]int{"30": 30, "90s": 90, "2m": 120, "1h": 3600, "1d": 86400, "1w": 604800}
 	for in, want := range tests {
@@ -56,6 +70,7 @@ func TestParseTimeFilter(t *testing.T) {
 		"2026-10-01T09:00:00Z": time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC),
 		"24h":                  now.Add(-24 * time.Hour),
 		"30m":                  now.Add(-30 * time.Minute),
+		"":                     {},
 	}
 	for in, want := range tests {
 		got, err := input.ParseTimeFilter(in, now)

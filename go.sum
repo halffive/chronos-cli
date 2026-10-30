@@ -1,5 +1,5 @@
-chronos.sh/go v0.2.0 h1:eZY4ZBQAqKm5dXWSMKrkYK1V1k3UYtXupuzC959Th4M=
-chronos.sh/go v0.2.0/go.mod h1:spqw8PLMFs7oEsC2chpshUsIIE1gWRcGIX/0qG4rSOM=
+chronos.sh/go v0.2.1 h1:56ecsyaiX9GCsG0hBK1O82tYgHhLMauxIdacQJAyjc0=
+chronos.sh/go v0.2.1/go.mod h1:spqw8PLMFs7oEsC2chpshUsIIE1gWRcGIX/0qG4rSOM=
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
 github.com/danieljoos/wincred v1.2.3 h1:v7dZC2x32Ut3nEfRH+vhoZGvN72+dQ/snVXo/vMFLdQ=
 github.com/danieljoos/wincred v1.2.3/go.mod h1:6qqX0WNrS4RzPZ1tnroDzq9kY3fu1KwE7MRLQK4X0bs=

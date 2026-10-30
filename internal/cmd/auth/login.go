@@ -102,8 +102,10 @@ func readKey(ctx context.Context, f *app.Factory, fromStdin bool) (string, error
 
 func readRawKey(ctx context.Context, f *app.Factory, fromStdin bool) (string, error) {
 	if fromStdin {
-		b, err := io.ReadAll(io.LimitReader(f.IO.In, maxKeyLength+1))
-		return string(b), err
+		return app.ReadWithContext(ctx, func() (string, error) {
+			b, err := io.ReadAll(io.LimitReader(f.IO.In, maxKeyLength+1))
+			return string(b), err
+		})
 	}
 	fmt.Fprint(f.IO.ErrOut, "Paste your API key: ")
 	secret, err := f.IO.ReadSecret(ctx)

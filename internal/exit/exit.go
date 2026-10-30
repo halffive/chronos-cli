@@ -58,7 +58,7 @@ func Codes() []Description {
 		{OutcomeUnknown, "A write failed after it may have reached the API. Check its state before running the command again."},
 		{JobUnsuccessful, "The job you waited for failed, was cancelled or was skipped."},
 		{WaitTimeout, "The wait ended before the job finished. Continue with chronos jobs wait <id>."},
-		{Interrupted, "Interrupted by Ctrl-C or SIGTERM."},
+		{Interrupted, "Interrupted by Ctrl-C, SIGTERM or SIGHUP."},
 	}
 }
 
@@ -90,6 +90,21 @@ func Usagef(format string, args ...any) *Error {
 func MissingKeyf(format string, args ...any) *Error {
 	return &Error{Exit: Auth, Code: CodeAPIKeyMissing, Message: fmt.Sprintf(format, args...)}
 }
+
+// WithMessage replaces err's message and keeps the rest of its outcome: the
+// exit code, error code, status and request id still come from err.
+func WithMessage(err error, message string) error {
+	return &messageError{err: err, message: message}
+}
+
+type messageError struct {
+	err     error
+	message string
+}
+
+func (e *messageError) Error() string { return e.message }
+
+func (e *messageError) Unwrap() error { return e.err }
 
 // Sentence turns a library's error text, such as cobra's "unknown flag:
 // --x", into a sentence that matches the CLI's own messages.

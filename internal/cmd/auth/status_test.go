@@ -106,7 +106,7 @@ func TestStatusTreatsABlankEnvKeyAsUnset(t *testing.T) {
 
 func TestStatusWithoutAKey(t *testing.T) {
 	res := clitest.Run(t, clitest.Options{Args: []string{"auth", "status", "--json"}})
-	got := decodeError(t, res.Stderr)
+	got := clitest.DecodeError(t, res.Stderr)
 	if res.Code != exit.Auth || got.Code != exit.CodeAPIKeyMissing {
 		t.Fatalf("exit = %d, error = %+v", res.Code, got)
 	}
@@ -119,7 +119,7 @@ func TestStatusWithASavedKeyMissingFromTheKeychain(t *testing.T) {
 	dir := t.TempDir()
 	saveInKeychain(t, dir, &clitest.Keychain{}, "https://api.chronos.sh", key)
 	res := clitest.Run(t, clitest.Options{Args: []string{"auth", "status", "--json"}, Env: map[string]string{"CHRONOS_CONFIG_DIR": dir}})
-	if got := decodeError(t, res.Stderr); res.Code != exit.Auth || got.Code != exit.CodeAPIKeyMissing {
+	if got := clitest.DecodeError(t, res.Stderr); res.Code != exit.Auth || got.Code != exit.CodeAPIKeyMissing {
 		t.Errorf("exit = %d, error = %+v", res.Code, got)
 	}
 }
@@ -127,7 +127,7 @@ func TestStatusWithASavedKeyMissingFromTheKeychain(t *testing.T) {
 func TestStatusWithARejectedKey(t *testing.T) {
 	api := clitest.NewAPI(t, unauthorized())
 	res := clitest.Run(t, clitest.Options{Args: []string{"auth", "status", "--json"}, Env: api.Env()})
-	got := decodeError(t, res.Stderr)
+	got := clitest.DecodeError(t, res.Stderr)
 	if res.Code != exit.Auth || got.Code != "unauthorized" || got.Status == nil || *got.Status != 401 {
 		t.Fatalf("exit = %d, error = %+v", res.Code, got)
 	}

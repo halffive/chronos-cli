@@ -1,14 +1,12 @@
 package auth_test
 
 import (
-	"encoding/json"
 	"os"
 	"strings"
 	"testing"
 
 	"chronos.sh/cli/internal/clitest"
 	"chronos.sh/cli/internal/config"
-	"chronos.sh/cli/internal/exit"
 )
 
 const key = clitest.APIKey
@@ -32,19 +30,6 @@ func golden(t *testing.T, name string, api *clitest.API, got string) {
 	t.Helper()
 	host := strings.TrimPrefix(api.URL, "http://")
 	clitest.Golden(t, name, strings.ReplaceAll(got, host, "127.0.0.1:PORT"))
-}
-
-type jsonError struct {
-	Error exit.Outcome `json:"error"`
-}
-
-func decodeError(t *testing.T, stderr string) exit.Outcome {
-	t.Helper()
-	var e jsonError
-	if err := json.Unmarshal([]byte(stderr), &e); err != nil {
-		t.Fatalf("stderr is not a JSON error: %v\n%s", err, stderr)
-	}
-	return e.Error
 }
 
 func readConfig(t *testing.T, dir string) string {

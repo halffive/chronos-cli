@@ -12,4 +12,4 @@ running the same command again is safe.
   7    A write failed after it may have reached the API. Check its state before running the command again.
   8    The job you waited for failed, was cancelled or was skipped.
   9    The wait ended before the job finished. Continue with chronos jobs wait <id>.
-  130  Interrupted by Ctrl-C or SIGTERM.
+  130  Interrupted by Ctrl-C, SIGTERM or SIGHUP.

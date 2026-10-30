@@ -100,11 +100,7 @@ func rejectedKey(err error, message string) error {
 	if !ok || apiErr.StatusCode != http.StatusUnauthorized {
 		return err
 	}
-	code := string(apiErr.Code)
-	if code == "" {
-		code = exit.CodeError
-	}
-	return &exit.Error{Exit: exit.Auth, Code: code, Message: message, Cause: err}
+	return exit.WithMessage(err, message)
 }
 
 func rejectedMessage(creds config.Credentials) string {

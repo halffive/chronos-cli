@@ -20,7 +20,7 @@ func newWaitCmd(f *app.Factory) *cobra.Command {
 		Args: cmdutil.ExactArgs("id"),
 	}
 	cmd := cmdutil.NewCommand(f, spec, func(ctx context.Context, _ *cobra.Command, args []string) (output.View, error) {
-		timeout, err := parseWaitTimeout(waitTimeout)
+		timeout, err := app.ParseWaitTimeout(waitTimeout)
 		if err != nil {
 			return nil, err
 		}
@@ -28,8 +28,8 @@ func newWaitCmd(f *app.Factory) *cobra.Command {
 		if err != nil {
 			return nil, err
 		}
-		return waitView(f.WaitForJob(ctx, c, app.WaitOptions{JobID: args[0], Timeout: timeout}))
+		return WaitView(f.WaitForJob(ctx, c, app.WaitOptions{JobID: args[0], Timeout: timeout}))
 	})
-	addWaitTimeoutFlag(cmd, &waitTimeout)
+	cmdutil.WaitTimeoutVar(cmd, &waitTimeout)
 	return cmd
 }

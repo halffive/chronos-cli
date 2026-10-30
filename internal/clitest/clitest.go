@@ -161,8 +161,10 @@ type Options struct {
 	Args []string
 	// Env is the whole environment. CHRONOS_CONFIG_DIR defaults to a fresh
 	// temporary directory.
-	Env       map[string]string
-	Stdin     string
+	Env   map[string]string
+	Stdin string
+	// In replaces Stdin, for a stdin that blocks.
+	In        io.Reader
 	StdinTTY  bool
 	StdoutTTY bool
 	Width     int
@@ -199,10 +201,14 @@ func Run(t *testing.T, opts Options) Result {
 	if ctx == nil {
 		ctx = t.Context()
 	}
+	var stdin io.Reader = strings.NewReader(opts.Stdin)
+	if opts.In != nil {
+		stdin = opts.In
+	}
 	var stdout, stderr bytes.Buffer
 	f := &app.Factory{
 		IO: &app.IOStreams{
-			In:     strings.NewReader(opts.Stdin),
+			In:     stdin,
 			Out:    &stdout,
 			ErrOut: &stderr,
 			InTTY:  opts.StdinTTY,

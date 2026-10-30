@@ -1,6 +1,7 @@
 package auth_test
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	chronos "chronos.sh/go"
 
@@ -106,7 +108,7 @@ func TestLoginRejectsInputThatIsNotAKey(t *testing.T) {
 				Env:   map[string]string{"CHRONOS_BASE_URL": api.URL},
 				Stdin: stdin,
 			})
-			if got := decodeError(t, res.Stderr); res.Code != exit.Usage || got.Code != exit.CodeUsage {
+			if got := clitest.DecodeError(t, res.Stderr); res.Code != exit.Usage || got.Code != exit.CodeUsage {
 				t.Errorf("exit = %d, error = %+v", res.Code, got)
 			}
 			assertNoKey(t, res)
@@ -127,7 +129,7 @@ func TestLoginWithARejectedKeyChangesNothing(t *testing.T) {
 		Stdin:    key,
 		Keychain: keychain,
 	})
-	got := decodeError(t, res.Stderr)
+	got := clitest.DecodeError(t, res.Stderr)
 	if res.Code != exit.Auth || got.Code != "unauthorized" || got.RequestID == nil {
 		t.Errorf("exit = %d, error = %+v", res.Code, got)
 	}
@@ -295,5 +297,30 @@ func TestLoginIgnoresTheSavedBaseURL(t *testing.T) {
 	}
 	if res.Stderr != "" {
 		t.Errorf("stderr = %q, want no note for the default API", res.Stderr)
+	}
+}
+
+func TestLoginWithKeyStopsWaitingForStdinOnInterrupt(t *testing.T) {
+	api := clitest.NewAPI(t)
+	stdin, writer := io.Pipe()
+	t.Cleanup(func() { writer.Close() })
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	done := make(chan clitest.Result, 1)
+	go func() {
+		done <- clitest.Run(t, clitest.Options{
+			Args:    []string{"--json", "auth", "login", "--with-key"},
+			Env:     map[string]string{"CHRONOS_BASE_URL": api.URL},
+			In:      stdin,
+			Context: ctx,
+		})
+	}()
+	select {
+	case res := <-done:
+		clitest.WantExit(t, res, exit.Interrupted)
+	case <-time.After(5 * time.Second):
+		writer.Close()
+		<-done
+		t.Fatal("auth login --with-key kept reading stdin after an interrupt")
 	}
 }

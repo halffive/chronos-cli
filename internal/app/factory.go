@@ -27,6 +27,7 @@ type IOStreams struct {
 	ErrOut io.Writer
 	InTTY  bool
 	OutTTY bool
+	ErrTTY bool
 	// Width is the terminal width of Out, or 0.
 	Width int
 	// ReadSecret reads one line from the terminal without echoing it.
@@ -43,7 +44,8 @@ type Factory struct {
 	// JobPollInterval is the time between checks while waiting for a job.
 	// Zero is the SDK's default.
 	JobPollInterval time.Duration
-	// Keychain holds saved API keys. Nil is the system keychain.
+	// Keychain holds saved API keys. Nil means the machine has no keychain,
+	// so a Factory built by hand never reaches the system one.
 	Keychain config.Keychain
 
 	JSON    bool
@@ -56,13 +58,14 @@ type Factory struct {
 
 func (f *Factory) Printer() *output.Printer {
 	return &output.Printer{
-		Out:   f.IO.Out,
-		Err:   f.IO.ErrOut,
-		JSON:  f.JSON,
-		TTY:   f.IO.OutTTY,
-		Color: f.IO.OutTTY && f.Getenv("NO_COLOR") == "" && f.Getenv("TERM") != "dumb",
-		Width: f.IO.Width,
-		Now:   f.Now,
+		Out:    f.IO.Out,
+		Err:    f.IO.ErrOut,
+		JSON:   f.JSON,
+		TTY:    f.IO.OutTTY,
+		ErrTTY: f.IO.ErrTTY,
+		Color:  f.IO.OutTTY && f.Getenv("NO_COLOR") == "" && f.Getenv("TERM") != "dumb",
+		Width:  f.IO.Width,
+		Now:    f.Now,
 	}
 }
 

@@ -33,9 +33,9 @@ func TestCreate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			api := clitest.NewAPI(t, created(schedule(t, nil)))
+			api := clitest.NewAPI(t, clitest.Created(schedule(t, nil)))
 			res := run(t, api, append([]string{"--json", "schedules", "create"}, tt.args...)...)
-			wantExit(t, res, exit.OK)
+			clitest.WantExit(t, res, exit.OK)
 			clitest.Golden(t, tt.name, transcript(api, res))
 		})
 	}
@@ -54,21 +54,21 @@ func TestCreateFlagsOverrideTheFile(t *testing.T) {
 	if err := os.WriteFile(file, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	api := clitest.NewAPI(t, created(schedule(t, nil)))
+	api := clitest.NewAPI(t, clitest.Created(schedule(t, nil)))
 	res := run(t, api, "--json", "schedules", "create", "--file", file,
 		"--name", "From flags", "--interval", "1h", "--payload", `{"from":"flags"}`, "--push-header", "X-Team: flags")
-	wantExit(t, res, exit.OK)
+	clitest.WantExit(t, res, exit.OK)
 	clitest.Golden(t, "create_file", transcript(api, res))
 }
 
 func TestCreateFromStdin(t *testing.T) {
-	api := clitest.NewAPI(t, created(schedule(t, nil)))
+	api := clitest.NewAPI(t, clitest.Created(schedule(t, nil)))
 	res := clitest.Run(t, clitest.Options{
 		Args:  []string{"--json", "schedules", "create", "--file", "-", "--push-url", "https://example.com/hooks/report"},
 		Env:   api.Env(),
 		Stdin: `{"name":"Nightly report","cron":"0 3 * * *","delivery":{"type":"pull"}}`,
 	})
-	wantExit(t, res, exit.OK)
+	clitest.WantExit(t, res, exit.OK)
 	want := `{"name":"Nightly report","cron":"0 3 * * *","delivery":{"type":"push","http":{"url":"https://example.com/hooks/report","method":"POST"}}}`
 	if got := api.Requests()[0].Body; got != want {
 		t.Errorf("body = %s\nwant   %s", got, want)
@@ -97,7 +97,7 @@ func TestCreateUsageErrors(t *testing.T) {
 				Env:   api.Env(),
 				Stdin: `{"name":"x","crn":"* * * * *"}`,
 			})
-			wantExit(t, res, exit.Usage)
+			clitest.WantExit(t, res, exit.Usage)
 			wantNoRequests(t, api)
 		})
 	}
@@ -106,8 +106,8 @@ func TestCreateUsageErrors(t *testing.T) {
 func TestCreateRejected(t *testing.T) {
 	api := clitest.NewAPI(t, clitest.Failure{Status: 400, Code: "handler_required_for_pull", Message: "Pull delivery needs a handler"}.Response())
 	res := run(t, api, "--json", "schedules", "create", "--name", "x", "--cron", "* * * * *")
-	wantExit(t, res, exit.Rejected)
-	if code := jsonError(t, res.Stderr).Code; code != "handler_required_for_pull" {
+	clitest.WantExit(t, res, exit.Rejected)
+	if code := clitest.DecodeError(t, res.Stderr).Code; code != "handler_required_for_pull" {
 		t.Errorf("error code = %q", code)
 	}
 }
@@ -115,12 +115,28 @@ func TestCreateRejected(t *testing.T) {
 func TestRepeatedPushHeaderLastOneWins(t *testing.T) {
 	// Map order is random, so a single run could pass by chance.
 	for range 20 {
-		api := clitest.NewAPI(t, created(schedule(t, nil)))
+		api := clitest.NewAPI(t, clitest.Created(schedule(t, nil)))
 		res := run(t, api, "--json", "schedules", "create", "--name", "x", "--interval", "5m", "--push-url", "https://example.com/h",
 			"--push-header", "X-Token: a", "--push-header", "x-token: b")
-		wantExit(t, res, exit.OK)
+		clitest.WantExit(t, res, exit.OK)
 		if body := api.Requests()[0].Body; !strings.Contains(body, `"headers":{"x-token":"b"}`) {
 			t.Fatalf("body = %s", body)
 		}
+	}
+}
+
+func TestPushFlagsReplaceAPullDeliveryFromTheFile(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "schedule.json")
+	body := `{"name": "From the file", "cron": "0 3 * * *",
+		"delivery": {"type": "pull", "http": {"url": "https://example.com/from-file", "method": "PUT", "headers": {"X-From": "file"}}}}`
+	if err := os.WriteFile(file, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	api := clitest.NewAPI(t, clitest.Created(schedule(t, nil)))
+	res := run(t, api, "--json", "schedules", "create", "--file", file, "--push-url", "https://example.com/hooks/sync")
+	clitest.WantExit(t, res, exit.OK)
+	want := `"delivery":{"type":"push","http":{"url":"https://example.com/hooks/sync","method":"POST"}}`
+	if got := api.Requests()[0].Body; !strings.Contains(got, want) {
+		t.Errorf("body = %s, want %s", got, want)
 	}
 }

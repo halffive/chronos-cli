@@ -12,6 +12,11 @@ import (
 	"chronos.sh/cli/internal/output"
 )
 
+// WillPrompt reports whether Confirm asks its question.
+func (f *Factory) WillPrompt(yes bool) bool {
+	return !yes && !f.DryRun && !f.JSON && f.IO.InTTY
+}
+
 // Confirm asks a yes-or-no question on a terminal. yes is the --yes flag,
 // which skips the question, as does a dry run. With --json or without a
 // terminal it is a usage error, so scripts and agents never hang on a prompt.
@@ -20,11 +25,11 @@ func (f *Factory) Confirm(ctx context.Context, question string, yes bool) error 
 	if yes || f.DryRun {
 		return nil
 	}
-	if f.JSON || !f.IO.InTTY {
+	if !f.WillPrompt(yes) {
 		return exit.Usagef("%s Pass --yes to confirm. chronos prompts only in a terminal and never with --json.", question)
 	}
 	fmt.Fprintf(f.IO.ErrOut, "%s [y/N] ", question)
-	answer, err := readWithContext(ctx, func() (string, error) {
+	answer, err := ReadWithContext(ctx, func() (string, error) {
 		line, err := bufio.NewReader(f.IO.In).ReadString('\n')
 		if errors.Is(err, io.EOF) {
 			return line, nil
@@ -41,9 +46,9 @@ func (f *Factory) Confirm(ctx context.Context, question string, yes bool) error 
 	return &exit.Error{Exit: exit.Failure, Code: exit.CodeCancelled, Message: "Cancelled. Nothing was changed."}
 }
 
-// readWithContext runs read, returning early when ctx ends so Ctrl-C works
-// at a prompt. The abandoned read finishes or dies with the process.
-func readWithContext(ctx context.Context, read func() (string, error)) (string, error) {
+// ReadWithContext runs read, returning early when ctx ends so Ctrl-C works
+// while reading stdin. The abandoned read finishes or dies with the process.
+func ReadWithContext(ctx context.Context, read func() (string, error)) (string, error) {
 	type result struct {
 		text string
 		err  error

@@ -2,7 +2,6 @@ package jobs_test
 
 import (
 	"encoding/json"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -15,27 +14,11 @@ import (
 const jobID = "0192f3a2-0000-7000-8000-000000000003"
 
 func job(t *testing.T, changes map[string]any) string {
-	t.Helper()
-	var j map[string]any
-	if err := json.Unmarshal([]byte(clitest.Fixture("job")), &j); err != nil {
-		t.Fatal(err)
-	}
-	for k, v := range changes {
-		j[k] = v
-	}
-	b, err := json.Marshal(j)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(b)
+	return clitest.FixtureWith(t, "job", changes)
 }
 
 func withStatus(t *testing.T, status string) string {
 	return job(t, map[string]any{"status": status})
-}
-
-func created(data string) clitest.Response {
-	return clitest.Response{Status: 201, Body: `{"success":true,"message":"ok","data":` + data + `}`}
 }
 
 func failedJob(t *testing.T) string {
@@ -58,21 +41,10 @@ func noColor(env map[string]string) map[string]string {
 	return env
 }
 
-func wantExit(t *testing.T, res clitest.Result, want exit.Code) {
-	t.Helper()
-	if res.Code != want {
-		t.Fatalf("exit = %d, want %d\nstdout: %s\nstderr: %s", res.Code, want, res.Stdout, res.Stderr)
-	}
-}
-
 func wantQuery(t *testing.T, req clitest.Request, want map[string]string) {
 	t.Helper()
-	u, err := url.Parse(req.RequestURI)
-	if err != nil {
-		t.Fatal(err)
-	}
 	got := map[string]string{}
-	for k, v := range u.Query() {
+	for k, v := range clitest.Query(t, req) {
 		got[k] = strings.Join(v, ",")
 	}
 	if len(got) != len(want) {
@@ -92,7 +64,7 @@ func TestListJSON(t *testing.T) {
 		"--handler", "report", "--search", "nightly",
 		"--scheduled-after", "24h", "--scheduled-before", "2026-10-28T11:00:00+01:00",
 		"--page", "2", "--size", "5")
-	wantExit(t, res, exit.OK)
+	clitest.WantExit(t, res, exit.OK)
 	clitest.Golden(t, "list", res.Stdout)
 	wantQuery(t, api.Requests()[0], map[string]string{
 		"status": "failed", "origin": "schedule", "schedule_id": "0192f3a0-0000-7000-8000-000000000001",
@@ -108,7 +80,7 @@ func TestListAllWalksEveryPage(t *testing.T) {
 		clitest.Page("["+job(t, map[string]any{"id": "0192f3a2-0000-7000-8000-000000000005", "status": "failed"})+"]", chronos.Paging{Page: 2, Pages: 2, Size: 1, Total: 2}),
 	)
 	res := run(t, api, "--json", "jobs", "list", "--status", "failed", "--all", "--size", "1")
-	wantExit(t, res, exit.OK)
+	clitest.WantExit(t, res, exit.OK)
 	clitest.Golden(t, "list_all", res.Stdout)
 	reqs := api.Requests()
 	if len(reqs) != 2 {
@@ -120,7 +92,7 @@ func TestListAllWalksEveryPage(t *testing.T) {
 func TestListTable(t *testing.T) {
 	api := clitest.NewAPI(t, clitest.Page("["+failedJob(t)+"]", chronos.Paging{Page: 1, Pages: 1, Size: 20, Total: 1}))
 	res := clitest.Run(t, clitest.Options{Args: []string{"jobs", "list"}, Env: noColor(api.Env()), StdoutTTY: true, Width: 150})
-	wantExit(t, res, exit.OK)
+	clitest.WantExit(t, res, exit.OK)
 	clitest.Golden(t, "list_table", res.Stdout)
 }
 
@@ -134,7 +106,7 @@ func TestGet(t *testing.T) {
 	t.Run("json", func(t *testing.T) {
 		api := clitest.NewAPI(t, clitest.OK(pushed))
 		res := run(t, api, "--json", "jobs", "get", jobID)
-		wantExit(t, res, exit.OK)
+		clitest.WantExit(t, res, exit.OK)
 		clitest.Golden(t, "get", res.Stdout)
 		if got := api.Requests()[0].RequestURI; got != "/v1/jobs/"+jobID {
 			t.Errorf("request = %s", got)
@@ -143,7 +115,7 @@ func TestGet(t *testing.T) {
 	t.Run("terminal", func(t *testing.T) {
 		api := clitest.NewAPI(t, clitest.OK(pushed))
 		res := clitest.Run(t, clitest.Options{Args: []string{"jobs", "get", jobID}, Env: noColor(api.Env()), StdoutTTY: true})
-		wantExit(t, res, exit.OK)
+		clitest.WantExit(t, res, exit.OK)
 		clitest.Golden(t, "get_terminal", res.Stdout)
 		if strings.Contains(res.Stdout, "downstream-secret") {
 			t.Error("a push header value was printed")
@@ -187,9 +159,9 @@ func TestCreate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			api := clitest.NewAPI(t, created(clitest.Fixture("job")))
+			api := clitest.NewAPI(t, clitest.Created(clitest.Fixture("job")))
 			res := clitest.Run(t, clitest.Options{Args: append([]string{"--json", "jobs", "create"}, tt.args...), Env: api.Env(), Stdin: tt.stdin})
-			wantExit(t, res, exit.OK)
+			clitest.WantExit(t, res, exit.OK)
 			clitest.Golden(t, "create", res.Stdout)
 			req := api.Requests()[0]
 			if req.Method != "POST" || req.RequestURI != "/v1/jobs" {
@@ -218,7 +190,7 @@ func TestCreateUsageErrorsSendNothing(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			api := clitest.NewAPI(t)
 			res := run(t, api, append([]string{"--json", "jobs", "create"}, tt.args...)...)
-			wantExit(t, res, exit.Usage)
+			clitest.WantExit(t, res, exit.Usage)
 		})
 	}
 }
@@ -244,11 +216,11 @@ func TestWait(t *testing.T) {
 				t.Parallel()
 				responses := []clitest.Response{clitest.OK(withStatus(t, "running")), clitest.OK(withStatus(t, tt.status))}
 				if args[1] == "create" {
-					responses = append([]clitest.Response{created(withStatus(t, "queued"))}, responses...)
+					responses = append([]clitest.Response{clitest.Created(withStatus(t, "queued"))}, responses...)
 				}
 				api := clitest.NewAPI(t, responses...)
 				res := run(t, api, append([]string{"--json"}, args...)...)
-				wantExit(t, res, tt.exit)
+				clitest.WantExit(t, res, tt.exit)
 				var got chronos.Job
 				if err := json.Unmarshal([]byte(res.Stdout), &got); err != nil || string(got.Status) != tt.status {
 					t.Errorf("stdout = %s, want the job with status %s", res.Stdout, tt.status)
@@ -261,7 +233,7 @@ func TestWait(t *testing.T) {
 func TestWaitJSON(t *testing.T) {
 	api := clitest.NewAPI(t, clitest.OK(failedJob(t)))
 	res := run(t, api, "--json", "jobs", "wait", jobID)
-	wantExit(t, res, exit.JobUnsuccessful)
+	clitest.WantExit(t, res, exit.JobUnsuccessful)
 	clitest.Golden(t, "wait", res.Stdout)
 	clitest.Golden(t, "wait_error", res.Stderr)
 }
@@ -271,7 +243,7 @@ func TestActions(t *testing.T) {
 		t.Run(verb, func(t *testing.T) {
 			api := clitest.NewAPI(t, clitest.OK(withStatus(t, "cancelled")))
 			res := run(t, api, "--json", "jobs", verb, jobID)
-			wantExit(t, res, exit.OK)
+			clitest.WantExit(t, res, exit.OK)
 			clitest.Golden(t, verb, res.Stdout)
 			req := api.Requests()[0]
 			if req.Method != "POST" || req.RequestURI != "/v1/jobs/"+jobID+"/"+verb {
@@ -295,7 +267,7 @@ func TestDryRunSendsNothing(t *testing.T) {
 				Args: append(append([]string{"--json", "jobs"}, args...), "--dry-run"),
 				Env:  map[string]string{"CHRONOS_BASE_URL": api.URL},
 			})
-			wantExit(t, res, exit.OK)
+			clitest.WantExit(t, res, exit.OK)
 			clitest.Golden(t, "dry_run_"+verb, strings.ReplaceAll(res.Stdout, api.URL, "http://api.test"))
 		})
 	}
@@ -335,9 +307,8 @@ func TestAPIRejections(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			api := clitest.NewAPI(t, tt.response)
 			res := run(t, api, append([]string{"--json", "jobs"}, tt.args...)...)
-			wantExit(t, res, tt.exit)
-			var e struct{ Error exit.Outcome }
-			if err := json.Unmarshal([]byte(res.Stderr), &e); err != nil || e.Error.Code != tt.code {
+			clitest.WantExit(t, res, tt.exit)
+			if code := clitest.DecodeError(t, res.Stderr).Code; code != tt.code {
 				t.Errorf("stderr = %s, want code %s", res.Stderr, tt.code)
 			}
 			if n := len(api.Requests()); n != 1 {
@@ -345,4 +316,42 @@ func TestAPIRejections(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNextPageHintRepeatsTheResolvedTimeWindow(t *testing.T) {
+	api := clitest.NewAPI(t, clitest.Page("["+failedJob(t)+"]", chronos.Paging{Page: 1, Pages: 2, Size: 1, Total: 2}))
+	res := clitest.Run(t, clitest.Options{
+		Args:      []string{"jobs", "list", "--scheduled-after", "1h", "--status", "failed"},
+		Env:       noColor(api.Env()),
+		StdoutTTY: true,
+	})
+	clitest.WantExit(t, res, exit.OK)
+	want := "Next page: chronos jobs list --scheduled-after 2026-10-28T11:00:00Z --status failed --page 2"
+	if !strings.Contains(res.Stderr, want) {
+		t.Errorf("stderr = %q, want %q", res.Stderr, want)
+	}
+}
+
+func TestPushURLPasswordIsRedacted(t *testing.T) {
+	const pushURL = "https://user:secret@example.com/hooks/report?sig=abc"
+	t.Run("terminal", func(t *testing.T) {
+		pushed := job(t, map[string]any{"delivery": map[string]any{"type": "push", "http": map[string]any{"url": pushURL, "method": "POST"}}})
+		api := clitest.NewAPI(t, clitest.OK(pushed))
+		res := clitest.Run(t, clitest.Options{Args: []string{"jobs", "get", jobID}, Env: noColor(api.Env()), StdoutTTY: true})
+		clitest.WantExit(t, res, exit.OK)
+		if !strings.Contains(res.Stdout, "POST https://user:xxxxx@example.com/hooks/report?sig=abc") || strings.Contains(res.Stdout, "secret") {
+			t.Errorf("stdout = %s, want the push URL with its password hidden", res.Stdout)
+		}
+	})
+	t.Run("dry run", func(t *testing.T) {
+		api := clitest.NewAPI(t)
+		res := clitest.Run(t, clitest.Options{
+			Args: []string{"--json", "jobs", "create", "--name", "Report", "--push-url", pushURL, "--dry-run"},
+			Env:  map[string]string{"CHRONOS_BASE_URL": api.URL},
+		})
+		clitest.WantExit(t, res, exit.OK)
+		if !strings.Contains(res.Stdout, `"url":"https://user:xxxxx@example.com/hooks/report?sig=abc"`) || strings.Contains(res.Stdout, "secret") {
+			t.Errorf("stdout = %s, want the push URL with its password hidden", res.Stdout)
+		}
+	})
 }

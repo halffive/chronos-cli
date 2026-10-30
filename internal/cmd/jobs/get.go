@@ -21,6 +21,6 @@ func newGetCmd(f *app.Factory) *cobra.Command {
 		if err != nil {
 			return nil, err
 		}
-		return jobView(j), nil
+		return View(j), nil
 	})
 }

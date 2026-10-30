@@ -20,7 +20,7 @@ func TestPauseAndResume(t *testing.T) {
 		t.Run(tt.verb, func(t *testing.T) {
 			api := clitest.NewAPI(t, clitest.OK(schedule(t, map[string]any{"status": tt.status})))
 			res := run(t, api, "--json", "schedules", tt.verb, scheduleID)
-			wantExit(t, res, exit.OK)
+			clitest.WantExit(t, res, exit.OK)
 			clitest.Golden(t, tt.verb, transcript(api, res))
 		})
 	}
@@ -42,7 +42,7 @@ func TestPauseAndResumeWhenAlreadyThere(t *testing.T) {
 				clitest.OK(schedule(t, map[string]any{"status": tt.status})),
 			)
 			res := run(t, api, "schedules", tt.verb, scheduleID)
-			wantExit(t, res, exit.OK)
+			clitest.WantExit(t, res, exit.OK)
 			clitest.Golden(t, tt.verb+"_already", transcript(api, res))
 		})
 	}
@@ -54,7 +54,7 @@ func TestPauseAndResumeAlreadyThereWithJSONPrintsOnlyTheSchedule(t *testing.T) {
 		clitest.OK(schedule(t, map[string]any{"status": "paused"})),
 	)
 	res := run(t, api, "--json", "schedules", "pause", scheduleID)
-	wantExit(t, res, exit.OK)
+	clitest.WantExit(t, res, exit.OK)
 	if res.Stderr != "" || !strings.Contains(res.Stdout, `"status":"paused"`) {
 		t.Errorf("stdout = %s\nstderr = %q", res.Stdout, res.Stderr)
 	}
@@ -73,8 +73,8 @@ func TestPauseAndResumeRejectOtherConflicts(t *testing.T) {
 		t.Run(tt.verb+" "+tt.code, func(t *testing.T) {
 			api := clitest.NewAPI(t, clitest.Failure{Status: 409, Code: tt.code, Message: "Conflict"}.Response())
 			res := run(t, api, "--json", "schedules", tt.verb, scheduleID)
-			wantExit(t, res, exit.Rejected)
-			if code := jsonError(t, res.Stderr).Code; code != tt.code {
+			clitest.WantExit(t, res, exit.Rejected)
+			if code := clitest.DecodeError(t, res.Stderr).Code; code != tt.code {
 				t.Errorf("error code = %q, want %q", code, tt.code)
 			}
 			if n := len(api.Requests()); n != 1 {
@@ -90,8 +90,8 @@ func TestPauseAndResumeAlreadyThereButInAnotherStatus(t *testing.T) {
 		clitest.OK(schedule(t, map[string]any{"status": "archived"})),
 	)
 	res := run(t, api, "--json", "schedules", "pause", scheduleID)
-	wantExit(t, res, exit.Rejected)
-	if code := jsonError(t, res.Stderr).Code; code != "schedule_already_paused" {
+	clitest.WantExit(t, res, exit.Rejected)
+	if code := clitest.DecodeError(t, res.Stderr).Code; code != "schedule_already_paused" {
 		t.Errorf("error code = %q", code)
 	}
 }
@@ -102,12 +102,12 @@ func TestPauseAndResumeAlreadyThereButTheLookupFails(t *testing.T) {
 		clitest.Failure{Status: 404, Code: "schedule_not_found", Message: "Schedule not found"}.Response(),
 	)
 	res := run(t, api, "--json", "schedules", "pause", scheduleID)
-	wantExit(t, res, exit.NotFound)
+	clitest.WantExit(t, res, exit.NotFound)
 }
 
 func TestArchive(t *testing.T) {
 	api := clitest.NewAPI(t, clitest.OK(schedule(t, map[string]any{"status": "archived", "next_run_at": nil})))
 	res := run(t, api, "--json", "schedules", "archive", scheduleID)
-	wantExit(t, res, exit.OK)
+	clitest.WantExit(t, res, exit.OK)
 	clitest.Golden(t, "archive", transcript(api, res))
 }

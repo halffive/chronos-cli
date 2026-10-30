@@ -28,7 +28,7 @@ func TestDryRunSendsNothing(t *testing.T) {
 				Env:      api.Env(),
 				StdinTTY: true,
 			})
-			wantExit(t, res, exit.OK)
+			clitest.WantExit(t, res, exit.OK)
 			wantNoRequests(t, api)
 			golden.WriteString("$ chronos schedules " + strings.Join(args, " ") + " --dry-run\n")
 			golden.WriteString(strings.ReplaceAll(res.Stdout, api.URL, "http://api.test"))
@@ -40,7 +40,7 @@ func TestDryRunSendsNothing(t *testing.T) {
 func TestDeleteDryRunSkipsThePromptLookup(t *testing.T) {
 	api := clitest.NewAPI(t)
 	res := clitest.Run(t, clitest.Options{Args: []string{"schedules", "delete", scheduleID, "--dry-run"}, Env: api.Env(), StdinTTY: true})
-	wantExit(t, res, exit.OK)
+	clitest.WantExit(t, res, exit.OK)
 	wantNoRequests(t, api)
 	if !strings.Contains(res.Stdout, "DELETE http://") {
 		t.Errorf("stdout = %s", res.Stdout)

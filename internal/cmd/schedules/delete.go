@@ -21,7 +21,7 @@ func newDeleteCmd(f *app.Factory) *cobra.Command {
 	}
 	cmd := cmdutil.NewCommand(f, spec, func(ctx context.Context, _ *cobra.Command, args []string) (output.View, error) {
 		id := args[0]
-		willPrompt := !yes && !f.DryRun && !f.JSON && f.IO.InTTY
+		willPrompt := f.WillPrompt(yes)
 		if !willPrompt {
 			if err := f.Confirm(ctx, fmt.Sprintf("Delete schedule %s?", id), yes); err != nil {
 				return nil, err
