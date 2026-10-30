@@ -6,6 +6,7 @@ import (
 
 	chronos "chronos.sh/go"
 
+	"chronos.sh/cli/internal/input"
 	"chronos.sh/cli/internal/output"
 )
 
@@ -40,7 +41,7 @@ func scheduleFields(s *chronos.Schedule) []output.Field {
 	}
 	if h := s.Delivery.HTTP; h != nil {
 		fields = append(fields,
-			output.Field{Label: "Push URL", Value: h.URL},
+			output.Field{Label: "Push URL", Value: output.RedactedURL(h.URL)},
 			output.Field{Label: "Push method", Value: h.Method},
 			output.Field{Label: "Push headers", Value: output.MaskedHeaders(h.Headers)},
 		)
@@ -54,14 +55,6 @@ func scheduleFields(s *chronos.Schedule) []output.Field {
 	)
 }
 
-var unitSuffixes = map[chronos.IntervalUnit]string{
-	chronos.IntervalUnitSecond: "s",
-	chronos.IntervalUnitMinute: "m",
-	chronos.IntervalUnitHour:   "h",
-	chronos.IntervalUnitDay:    "d",
-	chronos.IntervalUnitWeek:   "w",
-}
-
 func cadence(s *chronos.Schedule) string {
 	if s.Cron != nil {
 		return fmt.Sprintf("%s (%s)", *s.Cron, s.Timezone)
@@ -69,10 +62,7 @@ func cadence(s *chronos.Schedule) string {
 	if s.Interval == nil {
 		return ""
 	}
-	if suffix, ok := unitSuffixes[s.Interval.Unit]; ok {
-		return "every " + strconv.Itoa(s.Interval.Value) + suffix
-	}
-	return fmt.Sprintf("every %d %s", s.Interval.Value, s.Interval.Unit)
+	return "every " + input.FormatInterval(*s.Interval)
 }
 
 func seconds(n int) string {
@@ -84,20 +74,4 @@ func payloadText(payload map[string]any) string {
 		return ""
 	}
 	return output.JSONText(payload)
-}
-
-func jobView(j *chronos.Job) output.View {
-	return output.Resource(j, func(j *chronos.Job) []output.Field {
-		return []output.Field{
-			{Label: "ID", Value: j.ID},
-			{Label: "Name", Value: j.Name},
-			{Label: "Status", Value: string(j.Status)},
-			{Label: "Schedule ID", Value: j.ScheduleID},
-			{Label: "Scheduled for", Value: j.ScheduledFor},
-			{Label: "Attempts", Value: j.AttemptCount},
-			{Label: "Last error", Value: j.LastError},
-			{Label: "Started", Value: j.StartedAt},
-			{Label: "Completed", Value: j.CompletedAt},
-		}
-	})
 }

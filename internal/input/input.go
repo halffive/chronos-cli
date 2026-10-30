@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"math"
+	"net/http"
 	"os"
 	"regexp"
 	"strconv"
@@ -53,6 +55,16 @@ func ParseInterval(s string) (chronos.Interval, error) {
 	return chronos.Interval{Value: value, Unit: units[suffix].unit}, nil
 }
 
+// FormatInterval formats an interval the way ParseInterval reads it, such as "5m".
+func FormatInterval(interval chronos.Interval) string {
+	for suffix, u := range units {
+		if suffix != "" && u.unit == interval.Unit {
+			return strconv.Itoa(interval.Value) + suffix
+		}
+	}
+	return strconv.Itoa(interval.Value) + " " + string(interval.Unit)
+}
+
 // ParseSeconds parses "90s" or "2m" into whole seconds. A bare number is
 // seconds.
 func ParseSeconds(s string) (int, error) {
@@ -76,8 +88,11 @@ func ParseTime(s string) (time.Time, error) {
 }
 
 // ParseTimeFilter parses an RFC 3339 timestamp, or a duration read as that
-// long before now ("24h" is a day ago).
+// long before now ("24h" is a day ago). An empty string is the zero time.
 func ParseTimeFilter(s string, now time.Time) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
 	if t, err := ParseTime(s); err == nil {
 		return t, nil
 	}
@@ -96,6 +111,65 @@ func ParsePushHeader(s string) (name, value string, err error) {
 		return "", "", exit.Usagef("A push header must look like \"Name: value\". The value is not shown, since it may be a secret.")
 	}
 	return name, strings.TrimSpace(value), nil
+}
+
+// Push is what the --push-url, --push-method and --push-header flags set. A
+// nil field was not given.
+type Push struct {
+	URL     *string
+	Method  *string
+	Headers map[string]string
+}
+
+// SetHeader parses "Name: value" into p.Headers, replacing a header whose
+// name differs only in case.
+func (p *Push) SetHeader(raw string) error {
+	name, value, err := ParsePushHeader(raw)
+	if err != nil {
+		return err
+	}
+	if p.Headers == nil {
+		p.Headers = map[string]string{}
+	}
+	setHeader(p.Headers, name, value)
+	return nil
+}
+
+// Delivery applies p over current, the delivery from --file. It keeps current's
+// HTTP settings only for a push delivery, and defaults the method to POST,
+// which the API requires.
+func (p *Push) Delivery(current *chronos.Delivery) *chronos.Delivery {
+	if p == nil {
+		return current
+	}
+	var h chronos.HTTPDelivery
+	if current != nil && current.Type == chronos.DeliveryTypePush && current.HTTP != nil {
+		h = *current.HTTP
+	}
+	if p.URL != nil {
+		h.URL = *p.URL
+	}
+	if p.Method != nil {
+		h.Method = *p.Method
+	}
+	if h.Method == "" {
+		h.Method = http.MethodPost
+	}
+	if len(p.Headers) > 0 {
+		h.Headers = maps.Clone(h.Headers)
+		if h.Headers == nil {
+			h.Headers = map[string]string{}
+		}
+		for name, value := range p.Headers {
+			setHeader(h.Headers, name, value)
+		}
+	}
+	return &chronos.Delivery{Type: chronos.DeliveryTypePush, HTTP: &h}
+}
+
+func setHeader(headers map[string]string, name, value string) {
+	maps.DeleteFunc(headers, func(k, _ string) bool { return strings.EqualFold(k, name) })
+	headers[name] = value
 }
 
 // ReadPayload reads a JSON object given inline, as @path, or as @- for stdin.

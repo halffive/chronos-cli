@@ -37,20 +37,26 @@ func KeychainService(baseURL string) string {
 	return "chronos:" + strings.ToLower(host)
 }
 
-func orSystem(k Keychain) Keychain {
+func orUnavailable(k Keychain) Keychain {
 	if k == nil {
-		return systemKeychain{}
+		return unavailableKeychain{}
 	}
 	return k
 }
+
+type unavailableKeychain struct{}
+
+func (unavailableKeychain) Get(string, string) (string, error) { return "", ErrNoKeychain }
+func (unavailableKeychain) Set(string, string, string) error   { return ErrNoKeychain }
+func (unavailableKeychain) Delete(string, string) error        { return ErrNoKeychain }
 
 // keychainTimeout bounds each call, since a Secret Service that never
 // answers would otherwise hang the command.
 const keychainTimeout = 10 * time.Second
 
-type systemKeychain struct{}
+type SystemKeychain struct{}
 
-func (systemKeychain) Get(service, account string) (string, error) {
+func (SystemKeychain) Get(service, account string) (string, error) {
 	var secret string
 	err := withTimeout(keychainTimeout, func() error {
 		var err error
@@ -63,13 +69,13 @@ func (systemKeychain) Get(service, account string) (string, error) {
 	return secret, nil
 }
 
-func (systemKeychain) Set(service, account, secret string) error {
+func (SystemKeychain) Set(service, account, secret string) error {
 	return withTimeout(keychainTimeout, func() error {
 		return keychainError(keyring.Set(service, account, secret))
 	})
 }
 
-func (systemKeychain) Delete(service, account string) error {
+func (SystemKeychain) Delete(service, account string) error {
 	return withTimeout(keychainTimeout, func() error {
 		return keychainError(keyring.Delete(service, account))
 	})

@@ -9,16 +9,16 @@ import (
 )
 
 func TestTrigger(t *testing.T) {
-	api := clitest.NewAPI(t, created(job(t, "queued")))
+	api := clitest.NewAPI(t, clitest.Created(job(t, "queued")))
 	res := run(t, api, "--json", "schedules", "trigger", scheduleID)
-	wantExit(t, res, exit.OK)
+	clitest.WantExit(t, res, exit.OK)
 	clitest.Golden(t, "trigger", transcript(api, res))
 }
 
 func TestTriggerInATerminal(t *testing.T) {
-	api := clitest.NewAPI(t, created(job(t, "queued")))
+	api := clitest.NewAPI(t, clitest.Created(job(t, "queued")))
 	res := clitest.Run(t, clitest.Options{Args: []string{"schedules", "trigger", scheduleID}, Env: api.Env(), StdoutTTY: true})
-	wantExit(t, res, exit.OK)
+	clitest.WantExit(t, res, exit.OK)
 	clitest.Golden(t, "trigger_terminal", transcript(api, res))
 }
 
@@ -32,18 +32,18 @@ func TestTriggerWait(t *testing.T) {
 	}{
 		{
 			name:      "trigger_wait_completed",
-			responses: []clitest.Response{created(job(t, "queued")), clitest.OK(job(t, "running")), clitest.OK(job(t, "completed"))},
+			responses: []clitest.Response{clitest.Created(job(t, "queued")), clitest.OK(job(t, "running")), clitest.OK(job(t, "completed"))},
 			exit:      exit.OK,
 		},
 		{
 			name:      "trigger_wait_failed",
-			responses: []clitest.Response{created(job(t, "queued")), clitest.OK(job(t, "failed"))},
+			responses: []clitest.Response{clitest.Created(job(t, "queued")), clitest.OK(job(t, "failed"))},
 			exit:      exit.JobUnsuccessful,
 			code:      exit.CodeJobUnsuccessful,
 		},
 		{
 			name:      "trigger_wait_timeout",
-			responses: []clitest.Response{created(job(t, "queued")), clitest.OK(job(t, "running"))},
+			responses: []clitest.Response{clitest.Created(job(t, "queued")), clitest.OK(job(t, "running"))},
 			args:      []string{"--wait-timeout", "1"},
 			exit:      exit.WaitTimeout,
 			code:      exit.CodeWaitTimeout,
@@ -53,12 +53,12 @@ func TestTriggerWait(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			api := clitest.NewAPI(t, tt.responses...)
 			res := run(t, api, append([]string{"--json", "schedules", "trigger", scheduleID, "--wait"}, tt.args...)...)
-			wantExit(t, res, tt.exit)
+			clitest.WantExit(t, res, tt.exit)
 			if tt.code == "" {
 				clitest.Golden(t, tt.name, transcript(api, res))
 				return
 			}
-			if e := jsonError(t, res.Stderr); e.Code != tt.code || e.Retryable {
+			if e := clitest.DecodeError(t, res.Stderr); e.Code != tt.code || e.Retryable {
 				t.Errorf("error = %+v, want code %s and not retryable, since the trigger was applied", e, tt.code)
 			}
 			// The polling count varies, so the golden file holds the trigger
@@ -74,7 +74,7 @@ func TestTriggerWaitTimeoutIsCheckedBeforeTheTrigger(t *testing.T) {
 		t.Run(timeout, func(t *testing.T) {
 			api := clitest.NewAPI(t)
 			res := run(t, api, "--json", "schedules", "trigger", scheduleID, "--wait", "--wait-timeout", timeout)
-			wantExit(t, res, exit.Usage)
+			clitest.WantExit(t, res, exit.Usage)
 			wantNoRequests(t, api)
 			if !strings.Contains(res.Stderr, "usage_error") {
 				t.Errorf("stderr = %s", res.Stderr)
@@ -86,6 +86,6 @@ func TestTriggerWaitTimeoutIsCheckedBeforeTheTrigger(t *testing.T) {
 func TestTriggerWaitTimeoutNeedsWait(t *testing.T) {
 	api := clitest.NewAPI(t)
 	res := run(t, api, "--json", "schedules", "trigger", scheduleID, "--wait-timeout", "90s")
-	wantExit(t, res, exit.Usage)
+	clitest.WantExit(t, res, exit.Usage)
 	wantNoRequests(t, api)
 }

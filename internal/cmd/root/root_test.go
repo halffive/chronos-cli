@@ -87,19 +87,6 @@ func runProbe(t *testing.T, env map[string]string, args ...string) clitest.Resul
 	return clitest.Run(t, clitest.Options{Args: args, Env: env, Extend: probe})
 }
 
-type jsonError struct {
-	Error exit.Outcome `json:"error"`
-}
-
-func decodeError(t *testing.T, stderr string) exit.Outcome {
-	t.Helper()
-	var e jsonError
-	if err := json.Unmarshal([]byte(stderr), &e); err != nil {
-		t.Fatalf("stderr is not a JSON error: %v\n%s", err, stderr)
-	}
-	return e.Error
-}
-
 func TestExitCodesForAPIFailures(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -129,7 +116,7 @@ func TestExitCodesForAPIFailures(t *testing.T) {
 			if res.Stdout != "" {
 				t.Errorf("stdout = %q, want nothing", res.Stdout)
 			}
-			got := decodeError(t, res.Stderr)
+			got := clitest.DecodeError(t, res.Stderr)
 			if got.Code != tt.code || got.Retryable != tt.retryable {
 				t.Errorf("code = %q retryable = %v, want %q %v", got.Code, got.Retryable, tt.code, tt.retryable)
 			}
@@ -171,7 +158,7 @@ func TestNetworkFailures(t *testing.T) {
 
 	t.Run("refused write never left, so it is safe to repeat", func(t *testing.T) {
 		res := runProbe(t, refused, "--json", "probe", "write")
-		if got := decodeError(t, res.Stderr); res.Code != exit.Retryable || got.Code != exit.CodeNetwork || !got.Retryable {
+		if got := clitest.DecodeError(t, res.Stderr); res.Code != exit.Retryable || got.Code != exit.CodeNetwork || !got.Retryable {
 			t.Errorf("exit = %d, error = %+v; want %d %s retryable", res.Code, got, exit.Retryable, exit.CodeNetwork)
 		}
 	})
@@ -189,7 +176,7 @@ func TestNetworkFailures(t *testing.T) {
 			Extend:        probe,
 			ClientOptions: []chronos.Option{chronos.WithRequestTimeout(50 * time.Millisecond)},
 		})
-		got := decodeError(t, res.Stderr)
+		got := clitest.DecodeError(t, res.Stderr)
 		if res.Code != exit.OutcomeUnknown || got.Code != exit.CodeOutcomeUnknown || got.Retryable {
 			t.Errorf("exit = %d, error = %+v; want %d %s", res.Code, got, exit.OutcomeUnknown, exit.CodeOutcomeUnknown)
 		}
@@ -211,7 +198,7 @@ func TestInterrupted(t *testing.T) {
 
 func TestMissingKey(t *testing.T) {
 	res := runProbe(t, nil, "--json", "probe", "read", "s1")
-	if got := decodeError(t, res.Stderr); res.Code != exit.Auth || got.Code != exit.CodeAPIKeyMissing {
+	if got := clitest.DecodeError(t, res.Stderr); res.Code != exit.Auth || got.Code != exit.CodeAPIKeyMissing {
 		t.Errorf("exit = %d, code = %q; want %d %s", res.Code, got.Code, exit.Auth, exit.CodeAPIKeyMissing)
 	}
 }
@@ -268,7 +255,7 @@ func TestUsageErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			res := runProbe(t, map[string]string{"CHRONOS_API_KEY": clitest.APIKey}, tt.args...)
-			if got := decodeError(t, res.Stderr); res.Code != exit.Usage || got.Code != exit.CodeUsage {
+			if got := clitest.DecodeError(t, res.Stderr); res.Code != exit.Usage || got.Code != exit.CodeUsage {
 				t.Errorf("exit = %d, code = %q; want %d %s", res.Code, got.Code, exit.Usage, exit.CodeUsage)
 			}
 		})
@@ -379,7 +366,7 @@ func TestInterruptedWriteSaysTheOutcomeIsUnknown(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	time.AfterFunc(50*time.Millisecond, cancel)
 	res := clitest.Run(t, clitest.Options{Args: []string{"--json", "probe", "write"}, Env: api.Env(), Extend: probe, Context: ctx})
-	if got := decodeError(t, res.Stderr); res.Code != exit.Interrupted || !strings.Contains(got.Message, "may have reached the API") {
+	if got := clitest.DecodeError(t, res.Stderr); res.Code != exit.Interrupted || !strings.Contains(got.Message, "may have reached the API") {
 		t.Errorf("exit = %d, message = %q", res.Code, got.Message)
 	}
 }
@@ -394,7 +381,7 @@ func TestSavedKeyStaysWithItsBaseURL(t *testing.T) {
 		t.Fatal(err)
 	}
 	res := runProbe(t, map[string]string{"CHRONOS_CONFIG_DIR": dir, "CHRONOS_BASE_URL": api.URL}, "--json", "probe", "read", "s1")
-	got := decodeError(t, res.Stderr)
+	got := clitest.DecodeError(t, res.Stderr)
 	if res.Code != exit.Auth || got.Code != exit.CodeAPIKeyMissing || !strings.Contains(got.Message, "https://api.chronos.sh") {
 		t.Errorf("exit = %d, error = %+v", res.Code, got)
 	}

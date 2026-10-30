@@ -1,12 +1,23 @@
 > POST /v1/schedules/0192f3a0-0000-7000-8000-000000000001/trigger
 exit 0
 --- stdout
-ID             0192f3a2-0000-7000-8000-000000000003
-Name           Nightly report
-Status         queued
-Schedule ID    0192f3a0-0000-7000-8000-000000000001
-Scheduled for  3d ago
-Attempts       0
-Last error     -
-Started        -
-Completed      -
+ID               0192f3a2-0000-7000-8000-000000000003
+Name             Nightly report
+Status           queued
+Origin           schedule
+Schedule         0192f3a0-0000-7000-8000-000000000001
+Handler          -
+Delivery         push
+Push to          POST https://example.com/hooks/report
+Push headers     -
+Payload          {"account_number":9007199254740992,"report":"daily"}
+Attempts         0/1
+Timeout          30s
+Idempotency key  -
+Scheduled for    3d ago
+Run at           3d ago
+Started          -
+Completed        -
+Last error       -
+Created          3d ago
+Updated          3d ago

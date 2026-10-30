@@ -222,3 +222,102 @@ func TestCleanEscapesBidiAndKeepsErrorsOnOneLine(t *testing.T) {
 		t.Errorf("an API message added lines: %q", errOut.String())
 	}
 }
+
+func TestJSONErrorEscapesWhatCleanEscapesOnlyOnATerminal(t *testing.T) {
+	for _, tc := range []struct {
+		errTTY bool
+		want   string
+	}{
+		{errTTY: true, want: `a\u009bb`},
+		{errTTY: false, want: "a\u009bb"},
+	} {
+		var errOut bytes.Buffer
+		p := &output.Printer{Err: &errOut, JSON: true, ErrTTY: tc.errTTY}
+		p.Error(exit.Outcome{Message: "a\u009bb"})
+		if !strings.Contains(errOut.String(), tc.want) {
+			t.Errorf("errTTY %v: got %q, want it to contain %q", tc.errTTY, errOut.String(), tc.want)
+		}
+	}
+}
+
+func TestJSONOnATerminalEscapesWhatCleanEscapes(t *testing.T) {
+	value := map[string]string{"error": "a\u0085b\u007fc\u202ed\U000E0001e"}
+
+	p, out := printer(true, false, 0)
+	if err := p.PrintJSON(value); err != nil {
+		t.Fatal(err)
+	}
+	want := "{\n  \"error\": \"a\\u0085b\\u007fc\\u202ed\\udb40\\udc01e\"\n}\n"
+	if out.String() != want {
+		t.Errorf("terminal: got %q, want %q", out, want)
+	}
+	var decoded map[string]string
+	if err := json.Unmarshal(out.Bytes(), &decoded); err != nil || decoded["error"] != value["error"] {
+		t.Errorf("terminal JSON decodes to %q, %v; want the original text", decoded["error"], err)
+	}
+
+	p, out = printer(false, false, 0)
+	if err := p.PrintJSON(value); err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"error":"` + value["error"] + `"}` + "\n"; out.String() != want {
+		t.Errorf("piped: got %q, want %q", out, want)
+	}
+}
+
+func TestTableColumnsAlignByDisplayWidth(t *testing.T) {
+	cols := []output.Column[row]{
+		{Header: "ID", Value: func(r row) any { return r.ID }},
+		{Header: "Name", Value: func(r row) any { return r.Name }},
+		{Header: "Status", Value: func(r row) any { return r.Status }},
+	}
+	page := &chronos.Page[row]{
+		Data:   []row{{"s_1", "日本語の名前", "active", nil}, {"s_2", "Cafe\u0301", "paused", nil}},
+		Paging: chronos.Paging{Total: 2},
+	}
+	p, out := printer(true, false, 0)
+	p.Print(output.List(page, "schedules", cols))
+	want := "Showing 2 of 2 schedules\n\n" +
+		"ID   NAME          STATUS\n" +
+		"s_1  日本語の名前  active\n" +
+		"s_2  Cafe\u0301          paused\n"
+	if out.String() != want {
+		t.Errorf("got\n%s\nwant\n%s", out, want)
+	}
+}
+
+func TestTruncateFitsDisplayWidth(t *testing.T) {
+	tests := []struct {
+		in    string
+		width int
+		want  string
+	}{
+		{"日本語の名前", 7, "日本..."},
+		{"abcdef", 3, "..."},
+		{"abcdef", 2, "ab"},
+		{"日本", 1, ""},
+		{"abc", 3, "abc"},
+	}
+	for _, tt := range tests {
+		if got := output.Truncate(tt.in, tt.width); got != tt.want {
+			t.Errorf("Truncate(%q, %d) = %q, want %q", tt.in, tt.width, got, tt.want)
+		}
+	}
+}
+
+func TestRedactedURL(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://user:secret@example.com/hook?token=abc": "https://user:xxxxx@example.com/hook?token=abc",
+		"https://user@example.com/hook":                  "https://user@example.com/hook",
+		"https://example.com/hook?token=abc":             "https://example.com/hook?token=abc",
+		"https://user:secret@example.com:port/hook":      output.Masked,
+		"user:secret@example.com/hook":                   output.Masked,
+		"https:user:secret@example.com/hook":             output.Masked,
+		"https:/user:secret@example.com/hook":            output.Masked,
+		"/hook":                                          "/hook",
+	} {
+		if got := output.RedactedURL(in); got != want {
+			t.Errorf("RedactedURL(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

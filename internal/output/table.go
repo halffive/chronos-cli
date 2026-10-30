@@ -70,9 +70,9 @@ func (v listView[T]) renderTable(p *Printer, rows [][]string) error {
 	widths := make([]int, len(v.columns))
 	for j, col := range v.columns {
 		headers[j] = strings.ToUpper(col.Header)
-		widths[j] = utf8.RuneCountInString(headers[j])
+		widths[j] = displayWidth(headers[j])
 		for _, row := range rows {
-			widths[j] = max(widths[j], utf8.RuneCountInString(row[j]))
+			widths[j] = max(widths[j], displayWidth(row[j]))
 		}
 	}
 	v.fitFlex(p.Width, widths)
@@ -82,7 +82,7 @@ func (v listView[T]) renderTable(p *Printer, rows [][]string) error {
 		var b strings.Builder
 		for j, cell := range line {
 			cell = truncate(cell, widths[j])
-			pad := widths[j] - utf8.RuneCountInString(cell)
+			pad := widths[j] - displayWidth(cell)
 			if i > 0 && v.columns[j].Status && p.Color {
 				cell = colorStatus(cell)
 			}
@@ -122,12 +122,27 @@ func (v listView[T]) fitFlex(width int, widths []int) {
 	}
 }
 
+const ellipsis = "..."
+
 func truncate(s string, width int) string {
-	if utf8.RuneCountInString(s) <= width {
+	if displayWidth(s) <= width {
 		return s
 	}
-	runes := []rune(s)
-	return string(runes[:width-3]) + "..."
+	suffix := ellipsis
+	if width < len(ellipsis) {
+		suffix = ""
+	}
+	room := width - len(suffix)
+	var b strings.Builder
+	for _, r := range s {
+		w := runeWidth(r)
+		if w > room {
+			break
+		}
+		room -= w
+		b.WriteRune(r)
+	}
+	return b.String() + suffix
 }
 
 var lineBreaks = strings.NewReplacer("\t", " ", "\n", " ")

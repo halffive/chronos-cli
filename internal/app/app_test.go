@@ -13,18 +13,15 @@ import (
 	"chronos.sh/cli/internal/app"
 	"chronos.sh/cli/internal/clitest"
 	"chronos.sh/cli/internal/cmdutil"
+	"chronos.sh/cli/internal/config"
 	"chronos.sh/cli/internal/exit"
 	"chronos.sh/cli/internal/output"
 )
 
 const jobID = "0192f3a2-0000-7000-8000-000000000003"
 
-func job(status string) string {
-	var j map[string]any
-	json.Unmarshal([]byte(clitest.Fixture("job")), &j)
-	j["status"] = status
-	b, _ := json.Marshal(j)
-	return string(b)
+func job(t *testing.T, status string) string {
+	return clitest.FixtureWith(t, "job", map[string]any{"status": status})
 }
 
 // waiter adds "wait-probe", which waits for the fixture job, and with
@@ -63,12 +60,12 @@ func TestWaitForJob(t *testing.T) {
 		retryable bool
 		status    string
 	}{
-		{name: "completed", responses: []clitest.Response{clitest.OK(job("running")), clitest.OK(job("completed"))}, exit: exit.OK, status: "completed"},
-		{name: "failed", responses: []clitest.Response{clitest.OK(job("failed"))}, exit: exit.JobUnsuccessful, code: exit.CodeJobUnsuccessful, status: "failed"},
-		{name: "skipped", responses: []clitest.Response{clitest.OK(job("skipped"))}, exit: exit.JobUnsuccessful, code: exit.CodeJobUnsuccessful, status: "skipped"},
-		{name: "timed out on its own is safe to repeat", responses: []clitest.Response{clitest.OK(job("running"))}, exit: exit.WaitTimeout, code: exit.CodeWaitTimeout, retryable: true, status: "running"},
-		{name: "timed out after a create is not", responses: []clitest.Response{{Status: 201, Body: `{"success":true,"message":"ok","data":` + job("queued") + `}`}, clitest.OK(job("running"))}, args: []string{"--create"}, exit: exit.WaitTimeout, code: exit.CodeWaitTimeout, status: "running"},
-		{name: "check failed after a create", responses: []clitest.Response{{Status: 201, Body: `{"success":true,"message":"ok","data":` + job("queued") + `}`}, unavailable}, args: []string{"--create"}, exit: exit.WaitTimeout, code: exit.CodeWaitFailed, status: "queued"},
+		{name: "completed", responses: []clitest.Response{clitest.OK(job(t, "running")), clitest.OK(job(t, "completed"))}, exit: exit.OK, status: "completed"},
+		{name: "failed", responses: []clitest.Response{clitest.OK(job(t, "failed"))}, exit: exit.JobUnsuccessful, code: exit.CodeJobUnsuccessful, status: "failed"},
+		{name: "skipped", responses: []clitest.Response{clitest.OK(job(t, "skipped"))}, exit: exit.JobUnsuccessful, code: exit.CodeJobUnsuccessful, status: "skipped"},
+		{name: "timed out on its own is safe to repeat", responses: []clitest.Response{clitest.OK(job(t, "running"))}, exit: exit.WaitTimeout, code: exit.CodeWaitTimeout, retryable: true, status: "running"},
+		{name: "timed out after a create is not", responses: []clitest.Response{clitest.Created(job(t, "queued")), clitest.OK(job(t, "running"))}, args: []string{"--create"}, exit: exit.WaitTimeout, code: exit.CodeWaitTimeout, status: "running"},
+		{name: "check failed after a create", responses: []clitest.Response{clitest.Created(job(t, "queued")), unavailable}, args: []string{"--create"}, exit: exit.WaitTimeout, code: exit.CodeWaitFailed, status: "queued"},
 		{name: "check failed on its own", responses: []clitest.Response{unavailable}, exit: exit.Retryable, code: "error", retryable: true},
 	}
 	for _, tt := range tests {
@@ -84,10 +81,8 @@ func TestWaitForJob(t *testing.T) {
 			if tt.code == "" {
 				return
 			}
-			var e struct{ Error exit.Outcome }
-			json.Unmarshal([]byte(res.Stderr), &e)
-			if e.Error.Code != tt.code || e.Error.Retryable != tt.retryable {
-				t.Errorf("error = %+v, want code %s retryable %v", e.Error, tt.code, tt.retryable)
+			if e := clitest.DecodeError(t, res.Stderr); e.Code != tt.code || e.Retryable != tt.retryable {
+				t.Errorf("error = %+v, want code %s retryable %v", e, tt.code, tt.retryable)
 			}
 		})
 	}
@@ -95,7 +90,7 @@ func TestWaitForJob(t *testing.T) {
 
 func TestWaitFailedKeepsTheRequestID(t *testing.T) {
 	api := clitest.NewAPI(t,
-		clitest.Response{Status: 201, Body: `{"success":true,"message":"ok","data":` + job("queued") + `}`},
+		clitest.Created(job(t, "queued")),
 		clitest.Failure{Status: 503, Code: "error", Message: "Service unavailable"}.Response(),
 	)
 	res := clitest.Run(t, clitest.Options{Args: []string{"--json", "wait-probe", "--create"}, Env: api.Env(), Extend: waiter})
@@ -165,5 +160,22 @@ func TestCollectAll(t *testing.T) {
 	page, _ = app.CollectAll(items(0))
 	if b, _ := json.Marshal(page); string(b) != `{"data":[],"paging":{"page":1,"pages":0,"size":0,"total":0}}` {
 		t.Errorf("CollectAll(0) = %s", b)
+	}
+}
+
+func TestFactoryWithoutAKeychainNeverReachesTheSystemOne(t *testing.T) {
+	dir := t.TempDir()
+	saved := &config.File{Version: 1, Profiles: map[string]config.Profile{config.DefaultProfile: {
+		BaseURL:    "https://keychain-test.invalid",
+		Credential: config.Credential{Type: config.CredentialAPIKey, Storage: config.StorageKeychain},
+	}}}
+	if err := config.Save(dir, saved); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{"CHRONOS_CONFIG_DIR": dir}
+	f := &app.Factory{IO: &app.IOStreams{}, Getenv: func(k string) string { return env[k] }}
+	_, err := f.Credentials()
+	if err == nil || !strings.Contains(err.Error(), "(no keychain is available)") {
+		t.Errorf("Credentials() error = %v, want one saying there is no keychain", err)
 	}
 }

@@ -2,15 +2,13 @@ package schedules
 
 import (
 	"io"
-	"maps"
-	"net/http"
-	"strings"
 	"time"
 
 	chronos "chronos.sh/go"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"chronos.sh/cli/internal/cmdutil"
 	"chronos.sh/cli/internal/exit"
 	"chronos.sh/cli/internal/input"
 )
@@ -28,9 +26,7 @@ type bodyFlags struct {
 	timeout     string
 	maxRetries  int
 	payload     string
-	pushURL     string
-	pushMethod  string
-	pushHeaders []string
+	push        cmdutil.PushFlags
 }
 
 func (b *bodyFlags) register(cmd *cobra.Command) {
@@ -47,9 +43,7 @@ func (b *bodyFlags) register(cmd *cobra.Command) {
 	flags.StringVar(&b.timeout, "timeout", "", "Handler timeout, such as 30s or 5m")
 	flags.IntVar(&b.maxRetries, "max-retries", 0, "Retries after a failed attempt")
 	flags.StringVar(&b.payload, "payload", "", "JSON object passed to the handler with every job: inline, @path, or @- for stdin")
-	flags.StringVar(&b.pushURL, "push-url", "", "Push jobs to this URL instead of waiting for a worker")
-	flags.StringVar(&b.pushMethod, "push-method", "", "HTTP method for push delivery (default POST)")
-	flags.StringArrayVar(&b.pushHeaders, "push-header", nil, "Header sent with each push, as 'Name: value' (repeatable)")
+	b.push.Register(cmd)
 	cmd.MarkFlagsMutuallyExclusive("cron", "interval")
 }
 
@@ -65,13 +59,7 @@ type body struct {
 	Timeout     *int
 	MaxRetries  *int
 	Payload     map[string]any
-	Push        *push
-}
-
-type push struct {
-	URL     *string
-	Method  *string
-	Headers map[string]string
+	Push        *input.Push
 }
 
 func (b *bodyFlags) read(flags *pflag.FlagSet, stdin io.Reader, params any) (body, error) {
@@ -135,65 +123,12 @@ func (b *bodyFlags) parse(flags *pflag.FlagSet, stdin io.Reader) (body, error) {
 		}
 		out.Payload = payload
 	}
-	p, err := b.parsePush(flags)
+	p, err := b.push.Parse()
 	if err != nil {
 		return body{}, err
 	}
 	out.Push = p
 	return out, nil
-}
-
-func (b *bodyFlags) parsePush(flags *pflag.FlagSet) (*push, error) {
-	changed := flags.Changed
-	if !changed("push-url") && !changed("push-method") && !changed("push-header") {
-		return nil, nil
-	}
-	p := &push{Headers: map[string]string{}}
-	if changed("push-url") {
-		p.URL = new(b.pushURL)
-	}
-	if changed("push-method") {
-		p.Method = new(b.pushMethod)
-	}
-	for _, header := range b.pushHeaders {
-		name, value, err := input.ParsePushHeader(header)
-		if err != nil {
-			return nil, err
-		}
-		maps.DeleteFunc(p.Headers, func(k, _ string) bool { return strings.EqualFold(k, name) })
-		p.Headers[name] = value
-	}
-	return p, nil
-}
-
-func (p *push) delivery(current *chronos.Delivery) *chronos.Delivery {
-	if p == nil {
-		return current
-	}
-	var h chronos.HTTPDelivery
-	if current != nil && current.HTTP != nil {
-		h = *current.HTTP
-	}
-	if p.URL != nil {
-		h.URL = *p.URL
-	}
-	if p.Method != nil {
-		h.Method = *p.Method
-	}
-	if h.Method == "" {
-		h.Method = http.MethodPost
-	}
-	if len(p.Headers) > 0 {
-		h.Headers = maps.Clone(h.Headers)
-		if h.Headers == nil {
-			h.Headers = map[string]string{}
-		}
-		for name, value := range p.Headers {
-			maps.DeleteFunc(h.Headers, func(k, _ string) bool { return strings.EqualFold(k, name) })
-			h.Headers[name] = value
-		}
-	}
-	return &chronos.Delivery{Type: chronos.DeliveryTypePush, HTTP: &h}
 }
 
 func (b body) applyCreate(p *chronos.ScheduleCreateParams) {
@@ -216,7 +151,7 @@ func (b body) applyCreate(p *chronos.ScheduleCreateParams) {
 	if b.Payload != nil {
 		p.Payload = b.Payload
 	}
-	p.Delivery = b.Push.delivery(p.Delivery)
+	p.Delivery = b.Push.Delivery(p.Delivery)
 }
 
 func (b body) applyUpdate(p *chronos.ScheduleUpdateParams) {
@@ -237,7 +172,7 @@ func (b body) applyUpdate(p *chronos.ScheduleUpdateParams) {
 	if b.Payload != nil {
 		p.Payload = chronos.NewNullable(b.Payload)
 	}
-	p.Delivery = b.Push.delivery(p.Delivery)
+	p.Delivery = b.Push.Delivery(p.Delivery)
 }
 
 func set[T any](dst **T, v *T) {

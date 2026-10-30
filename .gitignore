@@ -1,5 +1,5 @@
 *.local.md
-.claude/settings*.json
+.claude/
 coverage.out
 /chronos
 /dist/

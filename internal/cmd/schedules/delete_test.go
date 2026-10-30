@@ -12,7 +12,7 @@ func TestDeleteWithYes(t *testing.T) {
 		t.Run(flag, func(t *testing.T) {
 			api := clitest.NewAPI(t, clitest.Response{Status: 204})
 			res := run(t, api, "--json", "schedules", "delete", scheduleID, flag)
-			wantExit(t, res, exit.OK)
+			clitest.WantExit(t, res, exit.OK)
 			clitest.Golden(t, "delete", transcript(api, res))
 		})
 	}
@@ -31,12 +31,12 @@ func TestDeleteNeedsYesWithoutAPrompt(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			api := clitest.NewAPI(t)
 			res := clitest.Run(t, clitest.Options{Args: tt.args, Env: api.Env(), StdinTTY: tt.tty})
-			wantExit(t, res, exit.Usage)
+			clitest.WantExit(t, res, exit.Usage)
 			wantNoRequests(t, api)
 		})
 		t.Run(tt.name+" without a key", func(t *testing.T) {
 			res := clitest.Run(t, clitest.Options{Args: tt.args, StdinTTY: tt.tty})
-			wantExit(t, res, exit.Usage)
+			clitest.WantExit(t, res, exit.Usage)
 		})
 	}
 }
@@ -59,7 +59,7 @@ func TestDeletePrompt(t *testing.T) {
 				StdinTTY: true,
 				Stdin:    tt.answer,
 			})
-			wantExit(t, res, tt.exit)
+			clitest.WantExit(t, res, tt.exit)
 			clitest.Golden(t, tt.name, transcript(api, res))
 		})
 	}
@@ -68,7 +68,7 @@ func TestDeletePrompt(t *testing.T) {
 func TestDeletePromptForAMissingSchedule(t *testing.T) {
 	api := clitest.NewAPI(t, clitest.Failure{Status: 404, Code: "schedule_not_found", Message: "Schedule not found"}.Response())
 	res := clitest.Run(t, clitest.Options{Args: []string{"schedules", "delete", scheduleID}, Env: api.Env(), StdinTTY: true, Stdin: "y\n"})
-	wantExit(t, res, exit.NotFound)
+	clitest.WantExit(t, res, exit.NotFound)
 	if n := len(api.Requests()); n != 1 {
 		t.Errorf("requests = %d, want only the lookup", n)
 	}

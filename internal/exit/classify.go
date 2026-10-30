@@ -60,6 +60,11 @@ func Classify(err error, sent Sent) Outcome {
 const writeAppliedSuffix = ". An earlier request in this command was applied, so check its state before running the command again."
 
 func classify(err error, method string) Outcome {
+	if e, ok := errors.AsType[*messageError](err); ok {
+		o := classify(e.err, method)
+		o.Message = e.message
+		return o
+	}
 	if e, ok := errors.AsType[*Error](err); ok {
 		o := newOutcome(e.Exit, e.Code, e.Message)
 		o.Retryable = o.Retryable || e.Retryable

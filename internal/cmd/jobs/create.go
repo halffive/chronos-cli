@@ -3,10 +3,6 @@ package jobs
 import (
 	"context"
 	"io"
-	"maps"
-	"slices"
-	"strings"
-	"time"
 
 	chronos "chronos.sh/go"
 	"github.com/spf13/cobra"
@@ -28,15 +24,10 @@ type createFlags struct {
 	maxRetries     int
 	payload        string
 	idempotencyKey string
-	pushURL        string
-	pushMethod     string
-	pushHeaders    []string
+	push           cmdutil.PushFlags
 	file           string
-	wait           bool
-	waitTimeout    string
+	wait           cmdutil.WaitFlags
 }
-
-var pushFlags = []string{"push-url", "push-method", "push-header"}
 
 func newCreateCmd(f *app.Factory) *cobra.Command {
 	var o createFlags
@@ -53,7 +44,7 @@ func newCreateCmd(f *app.Factory) *cobra.Command {
 		Mutates: true,
 	}
 	cmd := cmdutil.NewCommand(f, spec, func(ctx context.Context, cmd *cobra.Command, _ []string) (output.View, error) {
-		timeout, err := o.checkWait(cmd.Flags())
+		timeout, err := o.wait.Timeout()
 		if err != nil {
 			return nil, err
 		}
@@ -69,10 +60,10 @@ func newCreateCmd(f *app.Factory) *cobra.Command {
 		if err != nil {
 			return nil, err
 		}
-		if !o.wait {
-			return jobView(j), nil
+		if !o.wait.Wait {
+			return View(j), nil
 		}
-		return waitView(f.WaitForJob(ctx, c, app.WaitOptions{JobID: j.ID, Timeout: timeout, Job: j}))
+		return WaitView(f.WaitForJob(ctx, c, app.WaitOptions{JobID: j.ID, Timeout: timeout, Job: j}))
 	})
 
 	flags := cmd.Flags()
@@ -84,25 +75,11 @@ func newCreateCmd(f *app.Factory) *cobra.Command {
 	flags.IntVar(&o.maxRetries, "max-retries", 0, "Retries after a failed attempt (the API's default is 3)")
 	flags.StringVar(&o.payload, "payload", "", "JSON object passed to the handler: inline, @path, or @- for stdin")
 	flags.StringVar(&o.idempotencyKey, "idempotency-key", "", "Key that makes a repeated create fail instead of making a second job")
-	flags.StringVar(&o.pushURL, "push-url", "", "Push the job to this URL instead of waiting for a worker")
-	flags.StringVar(&o.pushMethod, "push-method", "POST", "HTTP method for push delivery")
-	flags.StringArrayVar(&o.pushHeaders, "push-header", nil, "Header sent with each push, as 'Name: value' (repeatable)")
+	o.push.Register(cmd)
 	flags.StringVar(&o.file, "file", "", "Full request body as JSON, from a path or - for stdin")
-	flags.BoolVar(&o.wait, "wait", false, "Wait for the job to finish and print it")
-	addWaitTimeoutFlag(cmd, &o.waitTimeout)
+	o.wait.Register(cmd)
 	cmd.MarkFlagsMutuallyExclusive("delay", "scheduled-for")
-	_ = cmd.RegisterFlagCompletionFunc("push-method", cmdutil.CompleteValues("GET", "POST", "PUT", "PATCH", "DELETE"))
 	return cmd
-}
-
-func (o *createFlags) checkWait(flags *pflag.FlagSet) (time.Duration, error) {
-	if o.wait {
-		return parseWaitTimeout(o.waitTimeout)
-	}
-	if flags.Changed("wait-timeout") {
-		return 0, exit.Usagef("--wait-timeout only applies with --wait.")
-	}
-	return 0, nil
 }
 
 func (o *createFlags) params(flags *pflag.FlagSet, stdin io.Reader) (chronos.JobCreateParams, error) {
@@ -130,7 +107,12 @@ func (o *createFlags) params(flags *pflag.FlagSet, stdin io.Reader) (chronos.Job
 	if err := o.parseValues(flags, &p, stdin); err != nil {
 		return p, err
 	}
-	return p, o.applyPush(flags, &p)
+	push, err := o.push.Parse()
+	if err != nil {
+		return p, err
+	}
+	p.Delivery = push.Delivery(p.Delivery)
+	return p, nil
 }
 
 func (o *createFlags) parseValues(flags *pflag.FlagSet, p *chronos.JobCreateParams, stdin io.Reader) error {
@@ -161,37 +143,6 @@ func (o *createFlags) parseValues(flags *pflag.FlagSet, p *chronos.JobCreatePara
 			return err
 		}
 		p.Payload = payload
-	}
-	return nil
-}
-
-func (o *createFlags) applyPush(flags *pflag.FlagSet, p *chronos.JobCreateParams) error {
-	if !slices.ContainsFunc(pushFlags, flags.Changed) {
-		return nil
-	}
-	if p.Delivery == nil || p.Delivery.Type != chronos.DeliveryTypePush {
-		p.Delivery = &chronos.Delivery{Type: chronos.DeliveryTypePush}
-	}
-	if p.Delivery.HTTP == nil {
-		p.Delivery.HTTP = &chronos.HTTPDelivery{}
-	}
-	h := p.Delivery.HTTP
-	if flags.Changed("push-url") {
-		h.URL = o.pushURL
-	}
-	if flags.Changed("push-method") || h.Method == "" {
-		h.Method = o.pushMethod
-	}
-	for _, raw := range o.pushHeaders {
-		name, value, err := input.ParsePushHeader(raw)
-		if err != nil {
-			return err
-		}
-		if h.Headers == nil {
-			h.Headers = map[string]string{}
-		}
-		maps.DeleteFunc(h.Headers, func(k, _ string) bool { return strings.EqualFold(k, name) })
-		h.Headers[name] = value
 	}
 	return nil
 }

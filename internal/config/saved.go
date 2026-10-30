@@ -14,7 +14,7 @@ func LoadSecret(k Keychain, c Credentials) (Credentials, error) {
 	if c.Storage != StorageKeychain {
 		return c, nil
 	}
-	key, err := orSystem(k).Get(KeychainService(c.BaseURL), DefaultProfile)
+	key, err := orUnavailable(k).Get(KeychainService(c.BaseURL), DefaultProfile)
 	switch {
 	case errors.Is(err, ErrSecretNotFound):
 		return Credentials{}, exit.MissingKeyf("Your saved key is no longer in the keychain. Run chronos auth login again, or set CHRONOS_API_KEY.")
@@ -51,7 +51,7 @@ func SaveAPIKey(opts SaveOptions) (SaveResult, error) {
 	if err := prepareDir(opts.Dir); err != nil {
 		return SaveResult{}, err
 	}
-	keychain := orSystem(opts.Keychain)
+	keychain := orUnavailable(opts.Keychain)
 	baseURL := normalizeURL(opts.BaseURL)
 	service := KeychainService(baseURL)
 
@@ -138,7 +138,7 @@ func RemoveProfile(dir string, k Keychain) (RemoveResult, error) {
 	}
 	result := RemoveResult{Removed: true}
 	if profile.Credential.Storage == StorageKeychain {
-		if warning := deleteItem(orSystem(k), KeychainService(profile.savedFor())); warning != "" {
+		if warning := deleteItem(orUnavailable(k), KeychainService(profile.savedFor())); warning != "" {
 			result.Warnings = append(result.Warnings, warning)
 		}
 	}

@@ -2,16 +2,13 @@ package jobs
 
 import (
 	"context"
-	"fmt"
 	"strconv"
-	"time"
 
 	chronos "chronos.sh/go"
 	"github.com/spf13/cobra"
 
 	"chronos.sh/cli/internal/app"
 	"chronos.sh/cli/internal/cmdutil"
-	"chronos.sh/cli/internal/input"
 	"chronos.sh/cli/internal/output"
 )
 
@@ -50,7 +47,7 @@ func attempts(j *chronos.Job) any {
 	return strconv.Itoa(j.AttemptCount) + "/" + strconv.Itoa(j.MaxRetries+1)
 }
 
-func jobView(j *chronos.Job) output.View {
+func View(j *chronos.Job) output.View {
 	return output.Resource(j, jobFields)
 }
 
@@ -66,7 +63,7 @@ func jobFields(j *chronos.Job) []output.Field {
 	}
 	if h := j.Delivery.HTTP; h != nil {
 		fields = append(fields,
-			output.Field{Label: "Push to", Value: h.Method + " " + h.URL},
+			output.Field{Label: "Push to", Value: h.Method + " " + output.RedactedURL(h.URL)},
 			output.Field{Label: "Push headers", Value: output.MaskedHeaders(h.Headers)},
 		)
 	}
@@ -89,24 +86,13 @@ func jobFields(j *chronos.Job) []output.Field {
 	)
 }
 
-func addWaitTimeoutFlag(cmd *cobra.Command, value *string) {
-	cmd.Flags().StringVar(value, "wait-timeout", fmt.Sprintf("%ds", int(app.DefaultWaitTimeout.Seconds())), "How long to wait for the job to finish, such as 90s or 5m")
-}
-
-func parseWaitTimeout(s string) (time.Duration, error) {
-	seconds, err := input.ParseSeconds(s)
-	if err != nil {
-		return 0, err
-	}
-	timeout := time.Duration(seconds) * time.Second
-	return timeout, app.CheckWaitTimeout(timeout)
-}
-
-func waitView(j *chronos.Job, err error) (output.View, error) {
+// WaitView wraps app.Factory.WaitForJob, which can return a job to show along
+// with an error.
+func WaitView(j *chronos.Job, err error) (output.View, error) {
 	if j == nil {
 		return nil, err
 	}
-	return jobView(j), err
+	return View(j), err
 }
 
 type jobAction func(s *chronos.JobsService, ctx context.Context, id string) (*chronos.Job, error)
@@ -123,6 +109,6 @@ func newActionCmd(f *app.Factory, spec cmdutil.CommandSpec, action jobAction) *c
 		if err != nil {
 			return nil, err
 		}
-		return jobView(j), nil
+		return View(j), nil
 	})
 }

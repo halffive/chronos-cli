@@ -9,6 +9,7 @@ import (
 	chronos "chronos.sh/go"
 
 	"chronos.sh/cli/internal/exit"
+	"chronos.sh/cli/internal/input"
 )
 
 const DefaultWaitTimeout = 60 * time.Second
@@ -29,7 +30,7 @@ type WaitOptions struct {
 // instead of 6 or 7, since running the command again would repeat the write.
 func (f *Factory) WaitForJob(ctx context.Context, c *chronos.Client, opts WaitOptions) (*chronos.Job, error) {
 	if opts.Timeout <= 0 {
-		return opts.Job, errors.New("chronos: WaitForJob needs a positive timeout; check the flag with CheckWaitTimeout before the write")
+		return opts.Job, errors.New("chronos: WaitForJob needs a positive timeout; parse the flag with ParseWaitTimeout before the write")
 	}
 	afterWrite := f.Sent().WriteApplied
 	waitCtx, cancel := context.WithTimeout(ctx, opts.Timeout)
@@ -64,13 +65,17 @@ func (f *Factory) WaitForJob(ctx context.Context, c *chronos.Client, opts WaitOp
 	return nil, err
 }
 
-// CheckWaitTimeout rejects a --wait-timeout below one second. Call it before
-// the write a wait follows, so a bad flag never leaves the write applied.
-func CheckWaitTimeout(timeout time.Duration) error {
-	if timeout < time.Second {
-		return exit.Usagef("--wait-timeout must be at least 1s.")
+// ParseWaitTimeout parses --wait-timeout and rejects anything below one second.
+func ParseWaitTimeout(s string) (time.Duration, error) {
+	seconds, err := input.ParseSeconds(s)
+	if err != nil {
+		return 0, err
 	}
-	return nil
+	timeout := time.Duration(seconds) * time.Second
+	if timeout < time.Second {
+		return 0, exit.Usagef("--wait-timeout must be at least 1s.")
+	}
+	return timeout, nil
 }
 
 func unlessCompleted(job *chronos.Job) error {
