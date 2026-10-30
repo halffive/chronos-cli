@@ -25,6 +25,7 @@ import (
 
 	"chronos.sh/cli/internal/app"
 	"chronos.sh/cli/internal/cmd/root"
+	"chronos.sh/cli/internal/config"
 	"chronos.sh/cli/internal/exit"
 )
 
@@ -175,6 +176,9 @@ type Options struct {
 	ClientOptions []chronos.Option
 	// Extend adds test-only commands to the root command.
 	Extend func(f *app.Factory, root *cobra.Command)
+	// Keychain defaults to an empty in-memory keychain, so tests never touch
+	// the system one.
+	Keychain config.Keychain
 }
 
 type Result struct {
@@ -212,6 +216,10 @@ func Run(t *testing.T, opts Options) Result {
 		Now:             func() time.Time { return now },
 		ClientOptions:   append([]chronos.Option{chronos.WithMaxRequestRetries(0)}, opts.ClientOptions...),
 		JobPollInterval: time.Millisecond,
+		Keychain:        opts.Keychain,
+	}
+	if f.Keychain == nil {
+		f.Keychain = &Keychain{}
 	}
 	cmd := root.NewCmd(f)
 	if opts.Extend != nil {

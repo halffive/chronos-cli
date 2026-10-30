@@ -87,6 +87,10 @@ func Usagef(format string, args ...any) *Error {
 	return &Error{Exit: Usage, Code: CodeUsage, Message: fmt.Sprintf(format, args...)}
 }
 
+func MissingKeyf(format string, args ...any) *Error {
+	return &Error{Exit: Auth, Code: CodeAPIKeyMissing, Message: fmt.Sprintf(format, args...)}
+}
+
 // Sentence turns a library's error text, such as cobra's "unknown flag:
 // --x", into a sentence that matches the CLI's own messages.
 func Sentence(s string) string {

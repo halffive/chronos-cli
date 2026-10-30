@@ -13,7 +13,7 @@ import (
 func TestSaveThenLoad(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "chronos")
 	want := &config.File{Version: 1, Profiles: map[string]config.Profile{
-		config.DefaultProfile: {APIKey: "chrns_abc", BaseURL: "https://staging.example.com"},
+		config.DefaultProfile: {BaseURL: "https://staging.example.com", Credential: fileKey("chrns_abc")},
 	}}
 	if err := config.Save(dir, want); err != nil {
 		t.Fatal(err)
@@ -36,6 +36,12 @@ func TestSaveThenLoad(t *testing.T) {
 	assertMode(t, dir, 0o700)
 	assertMode(t, filepath.Join(dir, "config.json"), 0o600)
 }
+
+func fileKey(secret string) config.Credential {
+	return config.Credential{Type: config.CredentialAPIKey, Storage: config.StorageFile, Secret: secret}
+}
+
+var keychainKey = config.Credential{Type: config.CredentialAPIKey, Storage: config.StorageKeychain}
 
 func assertMode(t *testing.T, path string, want os.FileMode) {
 	t.Helper()
@@ -97,10 +103,16 @@ func TestDir(t *testing.T) {
 
 func TestResolve(t *testing.T) {
 	stagingKey := &config.File{Version: 1, Profiles: map[string]config.Profile{
-		config.DefaultProfile: {APIKey: "chrns_staging", BaseURL: "https://staging.example.com"},
+		config.DefaultProfile: {BaseURL: "https://staging.example.com", Credential: fileKey("chrns_staging")},
 	}}
 	defaultKey := &config.File{Version: 1, Profiles: map[string]config.Profile{
-		config.DefaultProfile: {APIKey: "chrns_prod"},
+		config.DefaultProfile: {Credential: fileKey("chrns_prod")},
+	}}
+	inKeychain := &config.File{Version: 1, Profiles: map[string]config.Profile{
+		config.DefaultProfile: {Credential: keychainKey},
+	}}
+	futureCredential := &config.File{Version: 1, Profiles: map[string]config.Profile{
+		config.DefaultProfile: {Credential: config.Credential{Type: "user_token", Storage: config.StorageKeychain}},
 	}}
 	tests := []struct {
 		name string
@@ -112,13 +124,23 @@ func TestResolve(t *testing.T) {
 		{
 			name: "saved key keeps its base URL",
 			file: stagingKey,
-			want: config.Credentials{APIKey: "chrns_staging", BaseURL: "https://staging.example.com", Source: config.SourceConfig},
+			want: config.Credentials{APIKey: "chrns_staging", BaseURL: "https://staging.example.com", Source: config.SourceSaved, Storage: config.StorageFile},
 		},
 		{
 			name: "saved key with its own base URL given again",
 			file: stagingKey,
 			env:  map[string]string{"CHRONOS_BASE_URL": "https://staging.example.com/"},
-			want: config.Credentials{APIKey: "chrns_staging", BaseURL: "https://staging.example.com", Source: config.SourceConfig},
+			want: config.Credentials{APIKey: "chrns_staging", BaseURL: "https://staging.example.com", Source: config.SourceSaved, Storage: config.StorageFile},
+		},
+		{
+			name: "key in the keychain is left for LoadSecret",
+			file: inKeychain,
+			want: config.Credentials{BaseURL: "https://api.chronos.sh", Source: config.SourceSaved, Storage: config.StorageKeychain},
+		},
+		{
+			name: "an unknown credential type counts as no key",
+			file: futureCredential,
+			want: config.Credentials{BaseURL: "https://api.chronos.sh"},
 		},
 		{
 			name: "saved key is not sent to another base URL",
@@ -196,9 +218,9 @@ func TestCheckBaseURLBypasses(t *testing.T) {
 }
 
 func TestResolveTrimsTheEnvKey(t *testing.T) {
-	saved := &config.File{Version: 1, Profiles: map[string]config.Profile{config.DefaultProfile: {APIKey: "chrns_saved"}}}
+	saved := &config.File{Version: 1, Profiles: map[string]config.Profile{config.DefaultProfile: {Credential: fileKey("chrns_saved")}}}
 	got := saved.Resolve(func(k string) string { return map[string]string{"CHRONOS_API_KEY": "  \n"}[k] }, "")
-	if got.APIKey != "chrns_saved" || got.Source != config.SourceConfig {
+	if got.APIKey != "chrns_saved" || got.Source != config.SourceSaved {
 		t.Errorf("a blank env key hid the saved key: %+v", got)
 	}
 }
