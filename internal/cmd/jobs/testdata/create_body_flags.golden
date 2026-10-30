@@ -1,0 +1,1 @@
+{"name":"Report","delay":{"value":10,"unit":"minute"},"delivery":{"type":"push","http":{"url":"https://example.com/hooks/report","method":"POST","headers":{"Authorization":"Bearer downstream-secret"}}},"payload":{"account_number":9007199254740993},"timeout":120,"max_retries":0,"idempotency_key":"report-2026-10-28"}

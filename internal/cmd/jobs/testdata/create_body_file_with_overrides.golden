@@ -1,0 +1,1 @@
+{"name":"Report","scheduled_for":"2026-11-01T09:00:00Z","delivery":{"type":"push","http":{"url":"https://example.com/hooks/report","method":"PUT","headers":{"Authorization":"Bearer a","X-Team":"ops"}}},"payload":{"n":1}}

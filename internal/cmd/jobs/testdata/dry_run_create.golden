@@ -1,0 +1,1 @@
+{"dry_run":{"method":"POST","url":"http://api.test/v1/jobs","body":{"delivery":{"http":{"headers":{"Authorization":"••••"},"method":"POST","url":"https://example.com/hooks/report"},"type":"push"},"name":"Report"}}}

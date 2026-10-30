@@ -1,0 +1,1 @@
+{"dry_run":{"method":"POST","url":"http://api.test/v1/jobs/0192f3a2-0000-7000-8000-000000000003/cancel","body":null}}
