@@ -1,0 +1,1 @@
+{"name":"From file","delivery":{"type":"push","http":{"url":"https://example.com/hooks/report","method":"PUT","headers":{"Authorization":"Bearer new"}}}}

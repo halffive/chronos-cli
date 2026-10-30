@@ -1,0 +1,4 @@
+Showing 1 of 1 jobs
+
+ID                                    NAME            STATUS  ATTEMPTS  SCHEDULED FOR  COMPLETED  LAST ERROR
+0192f3a2-0000-7000-8000-000000000003  Nightly report  failed  4/4       3d ago         30m ago    HTTP 503 from https://example.com/hooks/report af...

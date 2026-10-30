@@ -1,0 +1,12 @@
+ID             0192f3a3-0000-7000-8000-000000000005
+Job            0192f3a2-0000-7000-8000-000000000003
+Status         timeout
+Trigger        system_retry
+Response code  -
+Duration       30s
+Started        3d ago
+Completed      3d ago
+Created        3d ago
+Error          Handler did not respond within 30s.
+               The connection was closed after the timeout and the attempt counted as failed.
+Result         {"note":"partial","rows":9007199254740993}

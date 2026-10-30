@@ -100,7 +100,7 @@ func (v listView[T]) renderTable(p *Printer, rows [][]string) error {
 
 const minFlexWidth = 12
 
-// fitFlex shrinks the first flex column so the table fits width.
+// fitFlex shrinks flex columns, rightmost first, until the table fits width.
 func (v listView[T]) fitFlex(width int, widths []int) {
 	if width <= 0 {
 		return
@@ -112,11 +112,13 @@ func (v listView[T]) fitFlex(width int, widths []int) {
 	if total <= width {
 		return
 	}
-	for j, col := range v.columns {
-		if col.Flex {
-			widths[j] = max(min(minFlexWidth, widths[j]), widths[j]-(total-width))
-			return
+	for j := len(v.columns) - 1; j >= 0 && total > width; j-- {
+		if !v.columns[j].Flex {
+			continue
 		}
+		shrunk := max(min(minFlexWidth, widths[j]), widths[j]-(total-width))
+		total -= widths[j] - shrunk
+		widths[j] = shrunk
 	}
 }
 

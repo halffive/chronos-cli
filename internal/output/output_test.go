@@ -176,6 +176,24 @@ func TestNarrowFlexColumnIsNotWidened(t *testing.T) {
 	}
 }
 
+func TestFlexColumnsShrinkRightmostFirst(t *testing.T) {
+	cols := []output.Column[row]{
+		{Header: "ID", Value: func(r row) any { return r.ID }},
+		{Header: "Name", Value: func(r row) any { return r.Name }, Flex: true},
+		{Header: "Status", Value: func(r row) any { return r.Status }, Flex: true},
+	}
+	long := &chronos.Page[row]{
+		Data:   []row{{"s_1", "Nightly report for the finance team", strings.Repeat("x", 40), nil}},
+		Paging: chronos.Paging{Total: 1},
+	}
+	p, out := printer(true, false, 40)
+	p.Print(output.List(long, "schedules", cols))
+	want := "s_1  Nightly report for...  xxxxxxxxx..."
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("got\n%s\nwant a row %q", out, want)
+	}
+}
+
 func TestDeleted(t *testing.T) {
 	p, out := printer(false, false, 0)
 	p.JSON = true
