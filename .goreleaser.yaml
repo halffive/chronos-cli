@@ -1,0 +1,59 @@
+version: 2
+
+project_name: chronos
+
+# dist/completions, written by the before hook, must stay outside this
+# directory, which GoReleaser requires to be empty.
+dist: dist/release
+
+before:
+  hooks:
+    - ./scripts/completions.sh
+
+builds:
+  - id: chronos
+    main: ./cmd/chronos
+    binary: chronos
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X chronos.sh/cli/internal/build.version={{ .Version }}
+      - -X chronos.sh/cli/internal/build.commit={{ .FullCommit }}
+      - -X chronos.sh/cli/internal/build.builtAt={{ .CommitDate }}
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+archives:
+  - id: chronos
+    ids: [chronos]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: chronos_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE
+      - README.md
+      - src: dist/completions/*
+        dst: completions
+        strip_parent: true
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  use: github-native
+
+release:
+  target_commitish: '{{ .FullCommit }}'
+  prerelease: auto
+  extra_files:
+    - glob: ./install.sh
