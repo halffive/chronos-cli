@@ -3,6 +3,7 @@ package root_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -230,6 +231,27 @@ func TestDryRunSendsNothingAndNeedsNoKey(t *testing.T) {
 	}
 }
 
+func TestDryRunNeverReadsTheKeychain(t *testing.T) {
+	api := clitest.NewAPI(t)
+	dir := t.TempDir()
+	saved := &config.File{Version: 1, Profiles: map[string]config.Profile{config.DefaultProfile: {
+		BaseURL:    api.URL,
+		Credential: config.Credential{Type: config.CredentialAPIKey, Storage: config.StorageKeychain},
+	}}}
+	if err := config.Save(dir, saved); err != nil {
+		t.Fatal(err)
+	}
+	res := clitest.Run(t, clitest.Options{
+		Args:     []string{"--json", "probe", "write", "--dry-run"},
+		Env:      map[string]string{"CHRONOS_CONFIG_DIR": dir},
+		Extend:   probe,
+		Keychain: &clitest.Keychain{Err: errors.New("locked")},
+	})
+	if res.Code != exit.OK || !strings.Contains(res.Stdout, `"dry_run"`) {
+		t.Errorf("exit = %d, stdout = %s, stderr = %s", res.Code, res.Stdout, res.Stderr)
+	}
+}
+
 func TestUsageErrors(t *testing.T) {
 	tests := []struct {
 		name string
@@ -365,7 +387,9 @@ func TestInterruptedWriteSaysTheOutcomeIsUnknown(t *testing.T) {
 func TestSavedKeyStaysWithItsBaseURL(t *testing.T) {
 	api := clitest.NewAPI(t)
 	dir := t.TempDir()
-	saved := &config.File{Version: 1, Profiles: map[string]config.Profile{config.DefaultProfile: {APIKey: "chrns_saved"}}}
+	saved := &config.File{Version: 1, Profiles: map[string]config.Profile{config.DefaultProfile: {
+		Credential: config.Credential{Type: config.CredentialAPIKey, Storage: config.StorageFile, Secret: "chrns_saved"},
+	}}}
 	if err := config.Save(dir, saved); err != nil {
 		t.Fatal(err)
 	}

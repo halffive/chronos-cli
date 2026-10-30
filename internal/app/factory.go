@@ -43,12 +43,15 @@ type Factory struct {
 	// JobPollInterval is the time between checks while waiting for a job.
 	// Zero is the SDK's default.
 	JobPollInterval time.Duration
+	// Keychain holds saved API keys. Nil is the system keychain.
+	Keychain config.Keychain
 
 	JSON    bool
 	BaseURL string
 	DryRun  bool
 
-	recorder *transport.Recorder
+	recorder    *transport.Recorder
+	credentials *config.Credentials
 }
 
 func (f *Factory) Printer() *output.Printer {
@@ -75,17 +78,29 @@ func (f *Factory) Config() (*config.File, error) {
 	return config.Load(dir)
 }
 
-// Credentials resolves the key and base URL. The config file is not read
-// when CHRONOS_API_KEY is set, so a broken file cannot block an env key.
+// Credentials resolves the key and base URL once per run, so the keychain
+// prompts at most once. The config file is not read when CHRONOS_API_KEY is
+// set, so a broken file cannot block an env key.
 func (f *Factory) Credentials() (config.Credentials, error) {
+	if f.credentials != nil {
+		return *f.credentials, nil
+	}
 	file := config.Empty()
-	if strings.TrimSpace(f.Getenv("CHRONOS_API_KEY")) == "" {
+	if config.EnvAPIKey(f.Getenv) == "" {
 		var err error
 		if file, err = f.Config(); err != nil {
 			return config.Credentials{}, err
 		}
 	}
-	return file.Resolve(f.Getenv, f.BaseURL), nil
+	creds := file.Resolve(f.Getenv, f.BaseURL)
+	if !f.DryRun {
+		var err error
+		if creds, err = config.LoadSecret(f.Keychain, creds); err != nil {
+			return config.Credentials{}, err
+		}
+	}
+	f.credentials = &creds
+	return creds, nil
 }
 
 // dryRunKey stands in for a missing key under --dry-run, which sends nothing.
@@ -98,29 +113,23 @@ func (f *Factory) Client() (*chronos.Client, error) {
 	}
 	switch {
 	case strings.ContainsFunc(creds.APIKey, unicode.IsControl):
-		return nil, missingKey("The API key in %s contains control characters. Copy it again from the dashboard.", sourceName(creds.Source))
+		return nil, controlCharactersError(creds.Source)
 	case creds.APIKey != "":
 	case f.DryRun:
 		creds.APIKey = dryRunKey
 	case creds.SavedFor != "":
-		return nil, missingKey("Your saved key is for %s, not %s. Set CHRONOS_API_KEY to use a key with %s.", creds.SavedFor, creds.BaseURL, creds.BaseURL)
+		return nil, exit.MissingKeyf("Your saved key is for %s, not %s. Set CHRONOS_API_KEY to use a key with %s.", creds.SavedFor, creds.BaseURL, creds.BaseURL)
 	default:
-		return nil, missingKey("No API key found. Set CHRONOS_API_KEY, or run chronos auth login.")
+		return nil, exit.MissingKeyf("No API key found. Set CHRONOS_API_KEY, or run chronos auth login.")
 	}
 	return f.ClientWith(creds)
 }
 
-func sourceName(source config.Source) string {
+func controlCharactersError(source config.Source) error {
 	if source == config.SourceEnv {
-		return "CHRONOS_API_KEY"
+		return exit.MissingKeyf("The API key in CHRONOS_API_KEY contains control characters. Copy it again from the dashboard.")
 	}
-	return "your config file"
-}
-
-func missingKey(format string, args ...any) *exit.Error {
-	e := exit.Failuref(format, args...)
-	e.Exit, e.Code = exit.Auth, exit.CodeAPIKeyMissing
-	return e
+	return exit.MissingKeyf("Your saved key contains control characters. Run chronos auth login with a key copied again from the dashboard.")
 }
 
 // ClientWith returns a client for creds. All clients in a run share one
