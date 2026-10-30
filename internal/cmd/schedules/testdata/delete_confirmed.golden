@@ -1,0 +1,7 @@
+> GET /v1/schedules/0192f3a0-0000-7000-8000-000000000001
+> DELETE /v1/schedules/0192f3a0-0000-7000-8000-000000000001
+exit 0
+--- stdout
+Deleted schedule 0192f3a0-0000-7000-8000-000000000001
+--- stderr
+Delete schedule "Nightly report" (0192f3a0-0000-7000-8000-000000000001)? [y/N] 
