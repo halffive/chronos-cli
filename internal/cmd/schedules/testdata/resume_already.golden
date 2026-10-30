@@ -1,0 +1,26 @@
+> POST /v1/schedules/0192f3a0-0000-7000-8000-000000000001/resume
+> GET /v1/schedules/0192f3a0-0000-7000-8000-000000000001
+exit 0
+--- stdout
+id:	0192f3a0-0000-7000-8000-000000000001
+name:	Nightly report
+status:	active
+description:	
+cadence:	0 3 * * * (Europe/London)
+handler:	
+runs:	
+run count:	0
+stop at:	
+timeout:	30s
+max retries:	0
+delivery:	push
+push url:	https://example.com/hooks/report
+push method:	POST
+push headers:	
+payload:	{"account_number":9007199254740992,"report":"daily"}
+next run:	2026-10-25T03:00:00Z
+last run:	
+created:	2026-10-24T22:48:14Z
+updated:	2026-10-24T22:48:14Z
+--- stderr
+Schedule 0192f3a0-0000-7000-8000-000000000001 is already active, so nothing changed.

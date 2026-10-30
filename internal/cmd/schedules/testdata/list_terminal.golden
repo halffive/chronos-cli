@@ -1,0 +1,11 @@
+> GET /v1/schedules?size=2
+exit 0
+--- stdout
+Showing 2 of 4 schedules
+
+ID                                    NAME            STATUS  CADENCE                    NEXT RUN  LAST RUN  DELIVERY
+0192f3a0-0000-7000-8000-000000000001  Nightly report  active  0 3 * * * (Europe/London)  3d ago              push
+0192f3a0-0000-7000-8000-000000000009  Sync            paused  every 5m                             5m ago    pull
+--- stderr
+
+Next page: chronos schedules list --size 2 --page 2

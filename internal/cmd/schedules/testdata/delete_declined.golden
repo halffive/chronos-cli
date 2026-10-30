@@ -1,0 +1,5 @@
+> GET /v1/schedules/0192f3a0-0000-7000-8000-000000000001
+exit 1
+--- stdout
+--- stderr
+Delete schedule "Nightly report" (0192f3a0-0000-7000-8000-000000000001)? [y/N] Error: Cancelled. Nothing was changed.

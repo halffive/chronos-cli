@@ -1,0 +1,16 @@
+$ chronos schedules create --name Sync --interval 5m --push-url https://example.com/hooks/sync --push-header Authorization: Bearer downstream-secret --dry-run
+{"dry_run":{"method":"POST","url":"http://api.test/v1/schedules","body":{"delivery":{"http":{"headers":{"Authorization":"••••"},"method":"POST","url":"https://example.com/hooks/sync"},"type":"push"},"interval":{"unit":"minute","value":5},"name":"Sync"}}}
+$ chronos schedules update 0192f3a0-0000-7000-8000-000000000001 --cron 0 4 * * * --clear runs --dry-run
+{"dry_run":{"method":"PATCH","url":"http://api.test/v1/schedules/0192f3a0-0000-7000-8000-000000000001","body":{"cron":"0 4 * * *","runs":null}}}
+$ chronos schedules pause 0192f3a0-0000-7000-8000-000000000001 --dry-run
+{"dry_run":{"method":"POST","url":"http://api.test/v1/schedules/0192f3a0-0000-7000-8000-000000000001/pause","body":null}}
+$ chronos schedules resume 0192f3a0-0000-7000-8000-000000000001 --dry-run
+{"dry_run":{"method":"POST","url":"http://api.test/v1/schedules/0192f3a0-0000-7000-8000-000000000001/resume","body":null}}
+$ chronos schedules trigger 0192f3a0-0000-7000-8000-000000000001 --dry-run
+{"dry_run":{"method":"POST","url":"http://api.test/v1/schedules/0192f3a0-0000-7000-8000-000000000001/trigger","body":null}}
+$ chronos schedules trigger 0192f3a0-0000-7000-8000-000000000001 --wait --dry-run
+{"dry_run":{"method":"POST","url":"http://api.test/v1/schedules/0192f3a0-0000-7000-8000-000000000001/trigger","body":null}}
+$ chronos schedules archive 0192f3a0-0000-7000-8000-000000000001 --dry-run
+{"dry_run":{"method":"POST","url":"http://api.test/v1/schedules/0192f3a0-0000-7000-8000-000000000001/archive","body":null}}
+$ chronos schedules delete 0192f3a0-0000-7000-8000-000000000001 --dry-run
+{"dry_run":{"method":"DELETE","url":"http://api.test/v1/schedules/0192f3a0-0000-7000-8000-000000000001","body":null}}

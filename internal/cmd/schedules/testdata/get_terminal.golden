@@ -1,0 +1,23 @@
+> GET /v1/schedules/0192f3a0-0000-7000-8000-000000000001
+exit 0
+--- stdout
+ID            0192f3a0-0000-7000-8000-000000000001
+Name          Nightly report
+Status        active
+Description   Sends the daily report
+Cadence       0 3 * * * (Europe/London)
+Handler       -
+Runs          10
+Run count     2
+Stop at       -
+Timeout       30s
+Max retries   0
+Delivery      push
+Push URL      https://example.com/hooks/report
+Push method   POST
+Push headers  Authorization: ••••, X-Team: ••••
+Payload       {"account_number":9007199254740992,"report":"daily"}
+Next run      3d ago
+Last run      -
+Created       3d ago
+Updated       3d ago
