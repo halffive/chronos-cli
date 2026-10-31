@@ -46,6 +46,17 @@ Check the install:
 chronos version
 ```
 
+## Upgrade
+
+Upgrade the same way you installed. `chronos` does not check for updates, so watch the [releases page](https://github.com/halffive/chronos-cli/releases) for new versions.
+
+- Homebrew: run `brew upgrade chronos-cli`.
+- Install script: run `curl -fsSL https://chronos.sh/install.sh | sh` again. If you set `CHRONOS_INSTALL_DIR`, set it to the same directory.
+- Go: run `go install chronos.sh/cli/cmd/chronos@latest`.
+- Release archive: download the new archive from the releases page. Replace the old binary with the one inside.
+
+Your saved API key and config stay in place.
+
 ## Uninstall
 
 1. Remove your saved API key from the OS keychain and the config file:
