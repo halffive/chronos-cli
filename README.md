@@ -1,6 +1,6 @@
 # chronos
 
-The command-line interface for [Chronos](https://chronos.sh). Create and run schedules, start one-off jobs, and see what ran and what failed. Every command prints JSON with `--json` and exits with a code listed in `chronos help exit-codes`, so scripts and coding agents can drive it as well as people.
+The command-line interface for [Chronos](https://chronos.sh). Create and run schedules, start one-off jobs, and see what ran and what failed. Every subcommand of `schedules`, `jobs`, `executions` and `auth` prints JSON with `--json`, and every command exits with a code listed in `chronos help exit-codes`, so scripts and coding agents can drive it as well as people.
 
 ## Install
 
