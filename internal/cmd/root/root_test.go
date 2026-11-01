@@ -100,6 +100,7 @@ func TestExitCodesForAPIFailures(t *testing.T) {
 		{"not found", clitest.Failure{Status: 404, Code: "schedule_not_found", Message: "Schedule not found"}.Response(), []string{"read", "s1"}, exit.NotFound, "schedule_not_found", false},
 		{"conflict", clitest.Failure{Status: 409, Code: "schedule_already_paused", Message: "Schedule is already paused"}.Response(), []string{"write"}, exit.Rejected, "schedule_already_paused", false},
 		{"plan limit", clitest.Failure{Status: 403, Code: "plan_limit_exceeded", Message: "Plan limit reached"}.Response(), []string{"write"}, exit.Rejected, "plan_limit_exceeded", false},
+		{"missing scope", clitest.Failure{Status: 403, Code: "insufficient_scope", Message: "Missing required scope: schedules:write"}.Response(), []string{"write"}, exit.Rejected, "insufficient_scope", false},
 		{"bad request", clitest.Failure{Status: 400, Code: "handler_required_for_pull", Message: "Pull delivery needs a handler"}.Response(), []string{"write"}, exit.Rejected, "handler_required_for_pull", false},
 		{"rate limited write", clitest.Failure{Status: 429, Code: "rate_limit_exceeded", Message: "Too many requests"}.Response(), []string{"write"}, exit.Retryable, "rate_limit_exceeded", true},
 		{"read 503", clitest.Failure{Status: 503, Code: "error", Message: "Service unavailable"}.Response(), []string{"read", "s1"}, exit.Retryable, "error", true},

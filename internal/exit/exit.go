@@ -53,7 +53,7 @@ func Codes() []Description {
 		{Usage, "Bad flags or arguments, or a confirmation that needs --yes."},
 		{NotFound, "The resource does not exist."},
 		{Auth, "No usable API key, or the API rejected it."},
-		{Rejected, "The API rejected the request for validation, a conflict or a plan limit. Read error.code."},
+		{Rejected, "The API rejected the request for validation, a conflict, a plan limit or a missing scope. Read error.code."},
 		{Retryable, "Safe to run again: rate limited, a read that failed, or a write that never left this machine."},
 		{OutcomeUnknown, "A write failed after it may have reached the API. Check its state before running the command again."},
 		{JobUnsuccessful, "The job you waited for failed, was cancelled or was skipped."},
