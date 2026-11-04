@@ -132,10 +132,10 @@ func encodeIndented(w io.Writer, v any) error {
 	return enc.Encode(v)
 }
 
-// Clean makes text from the API safe to print on a terminal: control and
-// bidi characters other than newline and tab show as \xNN, \uNNNN or
-// \UNNNNNNNN instead of being interpreted, so a crafted name cannot hide or
-// reorder output.
+// Clean makes text from the API safe to print on a terminal. Control
+// characters other than newline and tab, format characters such as bidi
+// overrides, and the Unicode line and paragraph separators print as \xNN,
+// \uNNNN or \UNNNNNNNN, so crafted text cannot hide, reorder or split output.
 func Clean(s string) string {
 	if !strings.ContainsFunc(s, isUnsafe) {
 		return s
@@ -160,7 +160,7 @@ func isUnsafe(r rune) bool {
 	if r == '\n' || r == '\t' {
 		return false
 	}
-	return unicode.IsControl(r) || unicode.Is(unicode.Cf, r)
+	return unicode.IsControl(r) || unicode.In(r, unicode.Cf, unicode.Zl, unicode.Zp)
 }
 
 // CleanLine is Clean for text that must stay on one line, such as a prompt

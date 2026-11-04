@@ -210,7 +210,7 @@ func TestJSONTextKeepsLargeIntegersAndHTML(t *testing.T) {
 }
 
 func TestCleanEscapesBidiAndKeepsErrorsOnOneLine(t *testing.T) {
-	for in, want := range map[string]string{"prod\u202eod": `prod\u202eod`, "a\U0001D1733": `a\U0001d1733`} {
+	for in, want := range map[string]string{"prod\u202eod": `prod\u202eod`, "a\U0001D1733": `a\U0001d1733`, "row\u2028forged\u2029": `row\u2028forged\u2029`} {
 		if got := output.Clean(in); got != want {
 			t.Errorf("Clean(%q) = %q, want %q", in, got, want)
 		}
