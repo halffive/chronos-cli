@@ -1,0 +1,20 @@
+> POST /v1/monitors/0192f3a0-0000-7000-8000-000000000011/pause
+> GET /v1/monitors/0192f3a0-0000-7000-8000-000000000011
+exit 0
+--- stdout
+id:	0192f3a0-0000-7000-8000-000000000011
+name:	Nightly backup
+status:	paused
+description:	
+cadence:	0 3 * * * (Europe/London)
+grace:	300s
+ping url:	https://ping.chronos.sh/••••
+last ping:	success (exit 0)
+last ping at:	2026-10-24T03:01:12Z
+last started:	2026-10-24T03:00:02Z
+next ping due:	
+alert at:	
+created:	2026-10-20T09:12:44Z
+updated:	2026-10-24T03:01:12Z
+--- stderr
+Monitor 0192f3a0-0000-7000-8000-000000000011 is already paused, so nothing changed.

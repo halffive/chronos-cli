@@ -277,7 +277,7 @@ func TestEveryCommandFollowsTheContract(t *testing.T) {
 	root := rootCmd(f)
 	mutatingVerbs := map[string]bool{
 		"create": true, "update": true, "delete": true, "pause": true, "resume": true,
-		"trigger": true, "archive": true, "cancel": true, "skip": true, "retry": true,
+		"trigger": true, "archive": true, "cancel": true, "skip": true, "retry": true, "rotate-ping-url": true,
 	}
 	var walk func(*cobra.Command)
 	walk = func(cmd *cobra.Command) {

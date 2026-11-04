@@ -1,0 +1,11 @@
+> GET /v1/monitors?size=2
+exit 0
+--- stdout
+Showing 2 of 4 monitors
+
+ID                                    NAME            STATUS  CADENCE                    LAST PING  LAST PING AT  NEXT PING DUE
+0192f3a0-0000-7000-8000-000000000011  Nightly backup  up      0 3 * * * (Europe/London)  success    4d ago        3d ago
+0192f3a0-0000-7000-8000-000000000019  Sync            new     every 1h
+--- stderr
+
+Next page: chronos monitors list --size 2 --page 2
