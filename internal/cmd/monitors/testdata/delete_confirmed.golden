@@ -1,0 +1,7 @@
+> GET /v1/monitors/0192f3a0-0000-7000-8000-000000000011
+> DELETE /v1/monitors/0192f3a0-0000-7000-8000-000000000011
+exit 0
+--- stdout
+Deleted monitor 0192f3a0-0000-7000-8000-000000000011
+--- stderr
+Delete monitor "Nightly backup" (0192f3a0-0000-7000-8000-000000000011)? [y/N] 

@@ -1,0 +1,4 @@
+> GET /v1/monitors/0192f3a0-0000-7000-8000-000000000011/pings?size=5
+exit 0
+--- stdout
+{"data":[{"id":"0192f3a0-0000-7000-8000-000000000022","kind":"fail","exit_code":1,"duration_ms":null,"body":"disk full\nretry later","method":"POST","user_agent":"curl/8.7.1","received_at":"2026-10-24T03:01:12Z"},{"id":"0192f3a0-0000-7000-8000-000000000021","kind":"success","exit_code":0,"duration_ms":70250,"body":null,"method":"GET","user_agent":"curl/8.7.1","received_at":"2026-10-24T03:01:12Z"}],"paging":{"page":1,"pages":1,"size":5,"total":2}}

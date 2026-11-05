@@ -1,0 +1,12 @@
+$ chronos monitors create --name Sync --interval 1h --grace 10m --dry-run
+{"dry_run":{"method":"POST","url":"http://api.test/v1/monitors","body":{"name":"Sync","interval":{"value":1,"unit":"hour"},"grace_seconds":600}}}
+$ chronos monitors update 0192f3a0-0000-7000-8000-000000000011 --cron 0 4 * * * --clear description --dry-run
+{"dry_run":{"method":"PATCH","url":"http://api.test/v1/monitors/0192f3a0-0000-7000-8000-000000000011","body":{"description":null,"cron":"0 4 * * *"}}}
+$ chronos monitors pause 0192f3a0-0000-7000-8000-000000000011 --dry-run
+{"dry_run":{"method":"POST","url":"http://api.test/v1/monitors/0192f3a0-0000-7000-8000-000000000011/pause","body":null}}
+$ chronos monitors resume 0192f3a0-0000-7000-8000-000000000011 --dry-run
+{"dry_run":{"method":"POST","url":"http://api.test/v1/monitors/0192f3a0-0000-7000-8000-000000000011/resume","body":null}}
+$ chronos monitors rotate-ping-url 0192f3a0-0000-7000-8000-000000000011 --dry-run
+{"dry_run":{"method":"POST","url":"http://api.test/v1/monitors/0192f3a0-0000-7000-8000-000000000011/ping-url/rotate","body":null}}
+$ chronos monitors delete 0192f3a0-0000-7000-8000-000000000011 --dry-run
+{"dry_run":{"method":"DELETE","url":"http://api.test/v1/monitors/0192f3a0-0000-7000-8000-000000000011","body":null}}

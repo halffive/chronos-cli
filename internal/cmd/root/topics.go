@@ -17,9 +17,9 @@ import (
 const scriptsFooter = `{{if not .HasParent}}
 Scripts and agents:
   Set CHRONOS_API_KEY to use a key without logging in.
-  For JSON on stdout, add --json to a subcommand of schedules, jobs, executions or auth,
+  For JSON on stdout, add --json to a subcommand of schedules, jobs, executions, monitors or auth,
   or to version, exit-codes or environment. Errors then go to stderr as {"error": {...}}.
-  Schedules and jobs commands that change something accept --dry-run, which prints the request and sends nothing.
+  Schedules, jobs and monitors commands that change something accept --dry-run, which prints the request and sends nothing.
   chronos prompts only in a terminal and never with --json. Pass --yes to confirm a delete.
   Run chronos help exit-codes to see what each exit code means.
   JSON output, exit codes, error codes, flag names and environment variables stay compatible.

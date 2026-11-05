@@ -15,6 +15,7 @@ import (
 	"chronos.sh/cli/internal/cmd/auth"
 	"chronos.sh/cli/internal/cmd/executions"
 	"chronos.sh/cli/internal/cmd/jobs"
+	"chronos.sh/cli/internal/cmd/monitors"
 	"chronos.sh/cli/internal/cmd/schedules"
 	"chronos.sh/cli/internal/cmd/version"
 	"chronos.sh/cli/internal/cmdutil"
@@ -31,7 +32,7 @@ func NewCmd(f *app.Factory) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "chronos",
 		Short:         "Manage Chronos from the terminal",
-		Long:          "Create and run schedules, start one-off jobs, and see what ran and what failed.",
+		Long:          "Create and run schedules, start one-off jobs, see what ran and what failed, and monitor cron jobs and scripts that run outside Chronos.",
 		Version:       build.Current().Version,
 		Args:          cmdutil.GroupArgs,
 		SilenceUsage:  true,
@@ -58,7 +59,7 @@ func NewCmd(f *app.Factory) *cobra.Command {
 		&cobra.Group{ID: groupSetup, Title: "Setup:"},
 		&cobra.Group{ID: groupTopics, Title: "Help topics:"},
 	)
-	addToGroup(cmd, groupResources, schedules.NewCmd(f), jobs.NewCmd(f), executions.NewCmd(f))
+	addToGroup(cmd, groupResources, schedules.NewCmd(f), jobs.NewCmd(f), executions.NewCmd(f), monitors.NewCmd(f))
 	addToGroup(cmd, groupSetup, auth.NewCmd(f), version.NewCmd(f))
 	addToGroup(cmd, groupTopics, exitCodesTopic(f), environmentTopic(f))
 	cmd.SetCompletionCommandGroupID(groupSetup)

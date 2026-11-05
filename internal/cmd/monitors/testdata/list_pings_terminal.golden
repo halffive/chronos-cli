@@ -1,0 +1,8 @@
+> GET /v1/monitors/0192f3a0-0000-7000-8000-000000000011/pings
+exit 0
+--- stdout
+Showing 2 of 2 pings
+
+RECEIVED  KIND     EXIT CODE  DURATION  METHOD  USER AGENT  BODY
+4d ago    fail     1                    POST    curl/8.7.1  disk full retry later
+4d ago    success  0          1m10.25s  GET     curl/8.7.1

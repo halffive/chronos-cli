@@ -1,4 +1,4 @@
-// Command chronos manages Chronos schedules, jobs and executions.
+// Command chronos manages Chronos schedules, jobs, executions and monitors.
 package main
 
 import (
