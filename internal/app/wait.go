@@ -26,8 +26,8 @@ type WaitOptions struct {
 // error when it completed, and with an *exit.Error when it finished any other
 // way or the wait ended first.
 //
-// When a write earlier in the run was applied, a failed check exits 9
-// instead of 6 or 7, since running the command again would repeat the write.
+// When a write earlier in the run was applied, a failed check exits 9, since
+// running the command again would repeat the write.
 func (f *Factory) WaitForJob(ctx context.Context, c *chronos.Client, opts WaitOptions) (*chronos.Job, error) {
 	if opts.Timeout <= 0 {
 		return opts.Job, errors.New("chronos: WaitForJob needs a positive timeout; parse the flag with ParseWaitTimeout before the write")
@@ -54,15 +54,19 @@ func (f *Factory) WaitForJob(ctx context.Context, c *chronos.Client, opts WaitOp
 			Retryable: true,
 		}
 	}
-	if afterWrite {
-		return opts.Job, &exit.Error{
-			Exit:    exit.WaitTimeout,
-			Code:    exit.CodeWaitFailed,
-			Message: fmt.Sprintf("The API accepted the request, but checking on job %s failed: %v. Keep waiting with chronos jobs wait %s.", opts.JobID, err, opts.JobID),
-			Cause:   err,
-		}
+	if !afterWrite {
+		return nil, err
 	}
-	return nil, err
+	message := fmt.Sprintf("The API accepted the request, but checking on job %s failed: %v. Keep waiting with chronos jobs wait %s.", opts.JobID, err, opts.JobID)
+	if apiErr, ok := errors.AsType[*chronos.APIError](err); ok && apiErr.Code == chronos.ErrorCodeInsufficientScope {
+		message = fmt.Sprintf("The API accepted the request, but your key cannot check on job %s. %s. Set CHRONOS_API_KEY to a key with that scope, then run chronos jobs wait %s.", opts.JobID, apiErr.Message, opts.JobID)
+	}
+	return opts.Job, &exit.Error{
+		Exit:    exit.WaitTimeout,
+		Code:    exit.CodeWaitFailed,
+		Message: message,
+		Cause:   err,
+	}
 }
 
 // ParseWaitTimeout parses --wait-timeout and rejects anything below one second.
