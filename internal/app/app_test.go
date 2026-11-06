@@ -99,6 +99,32 @@ func TestWaitFailedKeepsTheRequestID(t *testing.T) {
 	}
 }
 
+func TestWaitFailedNamesTheMissingScope(t *testing.T) {
+	api := clitest.NewAPI(t,
+		clitest.Created(job(t, "queued")),
+		clitest.Failure{Status: 403, Code: "insufficient_scope", Message: "Missing required scope: jobs:read"}.Response(),
+	)
+	res := clitest.Run(t, clitest.Options{Args: []string{"--json", "wait-probe", "--create"}, Env: api.Env(), Extend: waiter})
+	if res.Code != exit.WaitTimeout {
+		t.Fatalf("exit = %d, want %d\nstderr: %s", res.Code, exit.WaitTimeout, res.Stderr)
+	}
+	if !strings.Contains(res.Stdout, `"status":"queued"`) {
+		t.Errorf("stdout = %s, want the created job", res.Stdout)
+	}
+	e := clitest.DecodeError(t, res.Stderr)
+	if e.Code != exit.CodeWaitFailed || e.Status == nil || *e.Status != 403 || e.RequestID == nil || *e.RequestID != "req_test" {
+		t.Errorf("error = %+v, want code %s with status 403 and request id req_test", e, exit.CodeWaitFailed)
+	}
+	for _, want := range []string{jobID, "jobs:read", "CHRONOS_API_KEY"} {
+		if !strings.Contains(e.Message, want) {
+			t.Errorf("message = %q, want it to name %s", e.Message, want)
+		}
+	}
+	if strings.Contains(e.Message, "Keep waiting") {
+		t.Errorf("message = %q, want no advice to keep waiting with the same key", e.Message)
+	}
+}
+
 func confirmer(f *app.Factory, root *cobra.Command) {
 	var yes bool
 	cmd := cmdutil.NewCommand(f, cmdutil.CommandSpec{Use: "confirm-probe"}, func(ctx context.Context, _ *cobra.Command, _ []string) (output.View, error) {
