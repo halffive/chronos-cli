@@ -14,7 +14,7 @@ func newGetCmd(f *app.Factory) *cobra.Command {
 	spec := cmdutil.CommandSpec{
 		Use:   "get <id>",
 		Short: "Show a monitor and its ping URL",
-		Long:  "Show a monitor and its ping URL. A key without the monitors:write scope sees the token as ****, and that URL does not accept pings.",
+		Long:  "Show a monitor and its ping URL. A login or API key without the monitors:write scope sees the ping token as ****, and that URL does not accept pings.",
 		Args:  cmdutil.ExactArgs("id"),
 	}
 	return cmdutil.NewCommand(f, spec, func(ctx context.Context, _ *cobra.Command, args []string) (output.View, error) {

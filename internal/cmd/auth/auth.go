@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
 	chronos "chronos.sh/go"
 	"github.com/spf13/cobra"
@@ -16,7 +18,7 @@ import (
 )
 
 func NewCmd(f *app.Factory) *cobra.Command {
-	cmd := cmdutil.NewGroup("auth", "Log in with an API key and check which key is in use")
+	cmd := cmdutil.NewGroup("auth", "Log in, log out, and show which login or API key is in use")
 	cmd.AddCommand(newLoginCmd(f), newStatusCmd(f), newLogoutCmd(f))
 	return cmd
 }
@@ -26,8 +28,8 @@ type statusJSON struct {
 	Credential credentialJSON   `json:"credential"`
 	BaseURL    string           `json:"base_url"`
 	Account    *chronos.Account `json:"account"`
-	// User is always null for API keys.
-	User any `json:"user"`
+	// User is null for an API key.
+	User *config.User `json:"user"`
 }
 
 type credentialJSON struct {
@@ -36,31 +38,60 @@ type credentialJSON struct {
 	Storage  *config.Storage       `json:"storage"`
 	Prefix   string                `json:"prefix"`
 	LastFour string                `json:"last_four"`
+	// Scopes and ExpiresAt are null for an API key. ExpiresAt is also null for
+	// a login the API gave no expiry.
+	Scopes    []string   `json:"scopes"`
+	ExpiresAt *time.Time `json:"expires_at"`
+}
+
+func statusOf(creds config.Credentials, account *chronos.Account) statusJSON {
+	status := statusJSON{Credential: credentialOf(creds), BaseURL: creds.BaseURL, Account: account}
+	if creds.Type == config.CredentialOAuthToken {
+		user := creds.Grant.User
+		status.User = &user
+	}
+	return status
+}
+
+// credentialOf shows an OAuth token by its last four characters only, since
+// its prefix is the same for every token.
+func credentialOf(creds config.Credentials) credentialJSON {
+	c := credentialJSON{Type: creds.Type, Source: creds.Source}
+	if creds.Storage != "" {
+		c.Storage = &creds.Storage
+	}
+	if creds.Type != config.CredentialOAuthToken {
+		c.Prefix, c.LastFour = keyParts(creds.Secret)
+		return c
+	}
+	c.LastFour = lastFour(creds.Secret)
+	c.Scopes = append([]string{}, creds.Grant.Scopes...)
+	if !creds.Grant.ExpiresAt.IsZero() {
+		c.ExpiresAt = &creds.Grant.ExpiresAt
+	}
+	return c
 }
 
 func statusView(creds config.Credentials, account *chronos.Account) output.View {
-	prefix, lastFour := keyParts(creds.APIKey)
-	status := statusJSON{
-		Credential: credentialJSON{
-			Type:     config.CredentialAPIKey,
-			Source:   creds.Source,
-			Prefix:   prefix,
-			LastFour: lastFour,
-		},
-		BaseURL: creds.BaseURL,
-		Account: account,
-	}
-	if creds.Storage != "" {
-		status.Credential.Storage = &creds.Storage
-	}
-	return output.Resource(status, func(s statusJSON) []output.Field {
-		return []output.Field{
+	return output.Resource(statusOf(creds, account), func(s statusJSON) []output.Field {
+		fields := []output.Field{
 			{Label: "Workspace", Value: s.Account.Name},
 			{Label: "Workspace ID", Value: s.Account.ID},
-			{Label: "API key", Value: keyHint(creds.APIKey)},
-			{Label: "Source", Value: sourceText(creds)},
-			{Label: "Base URL", Value: s.BaseURL},
 		}
+		if s.User != nil {
+			fields = append(fields,
+				output.Field{Label: "Logged in as", Value: s.User.Email},
+				output.Field{Label: "OAuth token", Value: tokenHint(creds.Secret)},
+				output.Field{Label: "Scopes", Value: strings.Join(s.Credential.Scopes, " ")},
+				output.Field{Label: "Expires", Value: s.Credential.ExpiresAt},
+			)
+		} else {
+			fields = append(fields, output.Field{Label: "API key", Value: keyHint(creds.Secret)})
+		}
+		return append(fields,
+			output.Field{Label: "Source", Value: sourceText(creds)},
+			output.Field{Label: "Base URL", Value: s.BaseURL},
+		)
 	})
 }
 
@@ -95,6 +126,19 @@ func keyHint(key string) string {
 	return prefix + output.Masked + lastFour
 }
 
+// lastFour returns "" for a token under eight characters, where four would
+// show half of it or more.
+func lastFour(token string) string {
+	if len(token) < 8 {
+		return ""
+	}
+	return token[len(token)-4:]
+}
+
+func tokenHint(token string) string {
+	return output.Masked + lastFour(token)
+}
+
 func rejectedKey(err error, message string) error {
 	apiErr, ok := errors.AsType[*chronos.APIError](err)
 	if !ok || apiErr.StatusCode != http.StatusUnauthorized {
@@ -105,7 +149,7 @@ func rejectedKey(err error, message string) error {
 
 func rejectedMessage(creds config.Credentials) string {
 	if creds.Source == config.SourceEnv {
-		return fmt.Sprintf("The API rejected the key in CHRONOS_API_KEY (%s). Set CHRONOS_API_KEY to a current key from the dashboard.", keyHint(creds.APIKey))
+		return fmt.Sprintf("The API rejected the key in CHRONOS_API_KEY (%s). Set CHRONOS_API_KEY to a current key from the dashboard.", keyHint(creds.Secret))
 	}
-	return fmt.Sprintf("The API rejected your saved key (%s). Run chronos auth login with a current key from the dashboard.", keyHint(creds.APIKey))
+	return fmt.Sprintf("The API rejected your saved key (%s). Run chronos auth login to log in with the browser, or chronos auth login --paste-key with a current key from the dashboard.", keyHint(creds.Secret))
 }

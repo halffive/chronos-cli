@@ -181,6 +181,11 @@ type Options struct {
 	// Keychain defaults to an empty in-memory keychain, so tests never touch
 	// the system one.
 	Keychain config.Keychain
+	// Browser stands in for opening the browser. Nil means there is none.
+	Browser func(url string) error
+	// LoginTimeout defaults to five seconds, so a test that waits for a
+	// browser that never answers fails quickly.
+	LoginTimeout time.Duration
 }
 
 type Result struct {
@@ -196,6 +201,10 @@ func Run(t *testing.T, opts Options) Result {
 	now := opts.Now
 	if now.IsZero() {
 		now = Now()
+	}
+	loginTimeout := opts.LoginTimeout
+	if loginTimeout == 0 {
+		loginTimeout = 5 * time.Second
 	}
 	ctx := opts.Context
 	if ctx == nil {
@@ -223,6 +232,8 @@ func Run(t *testing.T, opts Options) Result {
 		ClientOptions:   append([]chronos.Option{chronos.WithMaxRequestRetries(0)}, opts.ClientOptions...),
 		JobPollInterval: time.Millisecond,
 		Keychain:        opts.Keychain,
+		OpenBrowser:     opts.Browser,
+		LoginTimeout:    loginTimeout,
 	}
 	if f.Keychain == nil {
 		f.Keychain = &Keychain{}

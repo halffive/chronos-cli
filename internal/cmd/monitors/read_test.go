@@ -76,7 +76,7 @@ func TestGetMarksAPingURLTheKeyCannotSee(t *testing.T) {
 	api := clitest.NewAPI(t, clitest.OK(monitor(t, map[string]any{"ping_url": "https://ping.chronos.sh/****"})))
 	res := clitest.Run(t, clitest.Options{Args: []string{"monitors", "get", monitorID}, Env: api.Env(), StdoutTTY: true})
 	clitest.WantExit(t, res, exit.OK)
-	if !strings.Contains(res.Stdout, "https://ping.chronos.sh/**** (token hidden because your key lacks the monitors:write scope)") {
+	if !strings.Contains(res.Stdout, "https://ping.chronos.sh/**** (ping token hidden, since the login or API key in use lacks monitors:write)") {
 		t.Errorf("stdout = %s", res.Stdout)
 	}
 }

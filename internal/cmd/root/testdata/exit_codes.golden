@@ -6,7 +6,7 @@ running the same command again is safe.
   1    Any other failure.
   2    Bad flags or arguments, or a confirmation that needs --yes.
   3    The resource does not exist.
-  4    No usable API key, or the API rejected it.
+  4    No usable login or API key, or the API rejected it.
   5    The API rejected the request for validation, a conflict, a plan limit or a missing scope. Read error.code.
   6    Safe to run again: rate limited, a read that failed, or a write that never left this machine.
   7    A write failed after it may have reached the API. Check its state before running the command again.

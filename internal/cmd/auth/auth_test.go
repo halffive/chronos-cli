@@ -9,7 +9,10 @@ import (
 	"chronos.sh/cli/internal/config"
 )
 
-const key = clitest.APIKey
+const (
+	key        = clitest.APIKey
+	oauthToken = "chrns_oat_abcdefghijklmnopqrstuvwxyz0Ab1Cd"
+)
 
 func account() clitest.Response {
 	return clitest.OK(clitest.Fixture("account"))
@@ -21,14 +24,14 @@ func unauthorized() clitest.Response {
 
 func saveInKeychain(t *testing.T, dir string, keychain *clitest.Keychain, baseURL, secret string) {
 	t.Helper()
-	if _, err := config.SaveAPIKey(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: baseURL, APIKey: secret}); err != nil {
+	if _, err := config.SaveCredential(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: baseURL, Type: config.CredentialAPIKey, Secret: secret}); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func golden(t *testing.T, name string, api *clitest.API, got string) {
+func golden(t *testing.T, name, baseURL, got string) {
 	t.Helper()
-	host := strings.TrimPrefix(api.URL, "http://")
+	host := strings.TrimPrefix(baseURL, "http://")
 	clitest.Golden(t, name, strings.ReplaceAll(got, host, "127.0.0.1:PORT"))
 }
 

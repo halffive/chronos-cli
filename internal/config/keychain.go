@@ -27,8 +27,9 @@ var (
 	ErrKeychainTimeout = errors.New("the keychain did not answer")
 )
 
-// KeychainService is the keychain service a key for baseURL is saved under,
-// such as "chronos:api.chronos.sh". Changing it orphans every saved key.
+// KeychainService is the keychain service a login for baseURL is saved
+// under, such as "chronos:api.chronos.sh". Changing it orphans every saved
+// login.
 func KeychainService(baseURL string) string {
 	host := baseURL
 	if u, err := url.Parse(normalizeURL(baseURL)); err == nil && u.Host != "" {

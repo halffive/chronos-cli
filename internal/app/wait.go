@@ -59,7 +59,7 @@ func (f *Factory) WaitForJob(ctx context.Context, c *chronos.Client, opts WaitOp
 	}
 	message := fmt.Sprintf("The API accepted the request, but checking on job %s failed: %v. Keep waiting with chronos jobs wait %s.", opts.JobID, err, opts.JobID)
 	if apiErr, ok := errors.AsType[*chronos.APIError](err); ok && apiErr.Code == chronos.ErrorCodeInsufficientScope {
-		message = fmt.Sprintf("The API accepted the request, but your key cannot check on job %s. %s. Set CHRONOS_API_KEY to a key with that scope, then run chronos jobs wait %s.", opts.JobID, apiErr.Message, opts.JobID)
+		message = fmt.Sprintf("The API accepted the request, but the login or API key in use cannot check on job %s. %s. Set CHRONOS_API_KEY to a key with that scope, then run chronos jobs wait %s.", opts.JobID, apiErr.Message, opts.JobID)
 	}
 	return opts.Job, &exit.Error{
 		Exit:    exit.WaitTimeout,

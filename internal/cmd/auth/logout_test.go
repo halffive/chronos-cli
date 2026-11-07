@@ -34,19 +34,19 @@ func TestLogoutNotes(t *testing.T) {
 		stdout string
 		stderr string
 	}{
-		{name: "nothing saved", args: []string{"auth", "logout"}, stderr: "There is no saved API key to remove.\n"},
+		{name: "nothing saved", args: []string{"auth", "logout"}, stderr: "There is no saved login to remove.\n"},
 		{name: "nothing saved, as JSON", args: []string{"auth", "logout", "--json"}, stdout: `{"logged_out":false}` + "\n"},
 		{
 			name:   "blank env key",
 			args:   []string{"auth", "logout"},
 			env:    map[string]string{"CHRONOS_API_KEY": " \n"},
-			stderr: "There is no saved API key to remove.\n",
+			stderr: "There is no saved login to remove.\n",
 		},
 		{
 			name:   "env key set",
 			args:   []string{"auth", "logout"},
 			env:    map[string]string{"CHRONOS_API_KEY": key},
-			stderr: "There is no saved API key to remove.\nCHRONOS_API_KEY is set, so commands still use that key.\n",
+			stderr: "There is no saved login to remove.\nCHRONOS_API_KEY is set, so commands still use that key.\n",
 		},
 	}
 	for _, tt := range tests {

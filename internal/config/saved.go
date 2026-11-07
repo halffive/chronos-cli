@@ -8,30 +8,36 @@ import (
 	"chronos.sh/cli/internal/exit"
 )
 
-// LoadSecret fills in APIKey for credentials saved in the keychain and
+// LoadSecret fills in Secret for credentials saved in the keychain and
 // returns other credentials unchanged.
 func LoadSecret(k Keychain, c Credentials) (Credentials, error) {
 	if c.Storage != StorageKeychain {
 		return c, nil
 	}
-	key, err := orUnavailable(k).Get(KeychainService(c.BaseURL), DefaultProfile)
+	secret, err := orUnavailable(k).Get(KeychainService(c.BaseURL), DefaultProfile)
+	var failed *exit.Error
 	switch {
+	case err == nil:
+		c.Secret = secret
+		return c, nil
 	case errors.Is(err, ErrSecretNotFound):
-		return Credentials{}, exit.MissingKeyf("Your saved key is no longer in the keychain. Run chronos auth login again, or set CHRONOS_API_KEY.")
+		failed = exit.MissingKeyf("Your saved login is no longer in the keychain. Run chronos auth login again, or set CHRONOS_API_KEY.")
 	case errors.Is(err, ErrNoKeychain), errors.Is(err, ErrKeychainTimeout):
-		return Credentials{}, exit.MissingKeyf("Could not reach the keychain to read your saved key (%v). Set CHRONOS_API_KEY, or run chronos auth login on a machine with a keychain.", err)
-	case err != nil:
-		return Credentials{}, exit.MissingKeyf("Could not read your saved key from the keychain (%v). Unlock the keychain and try again, or set CHRONOS_API_KEY.", err)
+		failed = exit.MissingKeyf("Could not reach the keychain to read your saved login (%v). Set CHRONOS_API_KEY, or run chronos auth login on a machine with a keychain.", err)
+	default:
+		failed = exit.MissingKeyf("Could not read your saved login from the keychain (%v). Unlock the keychain and try again, or set CHRONOS_API_KEY.", err)
 	}
-	c.APIKey = key
-	return c, nil
+	failed.Cause = err
+	return Credentials{}, failed
 }
 
 type SaveOptions struct {
 	Dir      string
 	Keychain Keychain
 	BaseURL  string
-	APIKey   string
+	Type     CredentialType
+	Secret   string
+	Grant    Grant
 }
 
 type SaveResult struct {
@@ -39,11 +45,11 @@ type SaveResult struct {
 	Warnings    []string
 }
 
-// SaveAPIKey saves the key as the default profile for the base URL: in the
-// keychain, or in the config file on a machine that has no keychain. A
-// keychain that refuses or does not answer fails the save. A keychain item
-// the old profile no longer needs is deleted.
-func SaveAPIKey(opts SaveOptions) (SaveResult, error) {
+// SaveCredential saves the API key or OAuth token as the default profile for
+// the base URL: in the keychain, or in the config file on a machine that has
+// no keychain. A keychain that refuses or does not answer fails the save. A
+// keychain item the old profile no longer needs is deleted.
+func SaveCredential(opts SaveOptions) (SaveResult, error) {
 	file, err := Load(opts.Dir)
 	if err != nil {
 		return SaveResult{}, err
@@ -68,17 +74,17 @@ func SaveAPIKey(opts SaveOptions) (SaveResult, error) {
 		}
 	}
 
-	result := SaveResult{Credentials: Credentials{APIKey: opts.APIKey, BaseURL: baseURL, Source: SourceSaved}}
-	credential := Credential{Type: CredentialAPIKey, Storage: StorageKeychain}
-	err = keychain.Set(service, DefaultProfile, opts.APIKey)
+	result := SaveResult{Credentials: Credentials{Secret: opts.Secret, Type: opts.Type, Grant: opts.Grant, BaseURL: baseURL, Source: SourceSaved}}
+	credential := Credential{Type: opts.Type, Storage: StorageKeychain, Grant: opts.Grant}
+	err = keychain.Set(service, DefaultProfile, opts.Secret)
 	switch {
 	case errors.Is(err, ErrNoKeychain):
-		credential.Storage, credential.Secret = StorageFile, opts.APIKey
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Saved the key in %s, readable only by you, because %s. To keep the key out of files, run chronos auth logout and set CHRONOS_API_KEY instead.", Path(opts.Dir), noKeychainReason(err)))
+		credential.Storage, credential.Secret = StorageFile, opts.Secret
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Saved the login in %s, readable only by you, because %s. To keep it out of files, run chronos auth logout and set CHRONOS_API_KEY instead.", Path(opts.Dir), noKeychainReason(err)))
 	case errors.Is(err, ErrKeychainTimeout):
-		return SaveResult{}, exit.Failuref("The keychain did not answer within %s, so the key was not saved. If a keychain item with service %s appears later, run chronos auth login again to replace it or delete it in your keychain app. To skip the keychain, set CHRONOS_API_KEY instead of logging in.", keychainTimeout, service)
+		return SaveResult{}, exit.Failuref("The keychain did not answer within %s, so the login was not saved. If a keychain item with service %s appears later, run chronos auth login again to replace it or delete it in your keychain app. To skip the keychain, set CHRONOS_API_KEY instead of logging in.", keychainTimeout, service)
 	case err != nil:
-		return SaveResult{}, exit.Failuref("The keychain refused the key (%v), so it was not saved. Unlock the keychain and run chronos auth login again, or set CHRONOS_API_KEY instead of logging in.", err)
+		return SaveResult{}, exit.Failuref("The keychain refused the login (%v), so it was not saved. Unlock the keychain and run chronos auth login again, or set CHRONOS_API_KEY instead of logging in.", err)
 	}
 	result.Credentials.Storage = credential.Storage
 

@@ -60,7 +60,7 @@ const hiddenToken = "****"
 
 func fullPingURL(s string) string {
 	if strings.HasSuffix(s, "/"+hiddenToken) {
-		return s + " (token hidden because your key lacks the monitors:write scope)"
+		return s + " (ping token hidden, since the login or API key in use lacks monitors:write)"
 	}
 	return s
 }

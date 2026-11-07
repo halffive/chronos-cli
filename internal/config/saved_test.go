@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zalando/go-keyring"
 
@@ -16,7 +18,10 @@ import (
 	"chronos.sh/cli/internal/exit"
 )
 
-const key = "chrns_abc0123456789abcdefghijklmnopq"
+const (
+	key   = "chrns_abc0123456789abcdefghijklmnopq"
+	token = "chrns_oat_abcdefghijklmnopqrstuvwxyz0Ab1Cd"
+)
 
 func TestKeychainServiceNameIsFixed(t *testing.T) {
 	tests := map[string]string{
@@ -41,15 +46,15 @@ func readFile(t *testing.T, path string) string {
 	return string(b)
 }
 
-func TestSaveAPIKeyUsesTheKeychain(t *testing.T) {
+func TestSaveCredentialUsesTheKeychain(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "chronos")
 	keychain := &clitest.Keychain{}
-	saved, err := config.SaveAPIKey(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh/", APIKey: key})
+	saved, err := config.SaveCredential(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh/", Type: config.CredentialAPIKey, Secret: key})
 	if err != nil || saved.Warnings != nil {
-		t.Fatalf("SaveAPIKey: %v, warnings: %q", err, saved.Warnings)
+		t.Fatalf("SaveCredential: %v, warnings: %q", err, saved.Warnings)
 	}
-	want := config.Credentials{APIKey: key, BaseURL: "https://api.chronos.sh", Source: config.SourceSaved, Storage: config.StorageKeychain}
-	if saved.Credentials != want {
+	want := config.Credentials{Secret: key, Type: config.CredentialAPIKey, BaseURL: "https://api.chronos.sh", Source: config.SourceSaved, Storage: config.StorageKeychain}
+	if !reflect.DeepEqual(saved.Credentials, want) {
 		t.Errorf("credentials = %+v, want %+v", saved.Credentials, want)
 	}
 	if got, _ := keychain.Get("chronos:api.chronos.sh", "default"); got != key {
@@ -73,10 +78,65 @@ func TestSaveAPIKeyUsesTheKeychain(t *testing.T) {
 	}
 }
 
-func TestSaveAPIKeyFallsBackToTheFileWithoutAKeychain(t *testing.T) {
+func TestSaveCredentialKeepsAGrantBesideTheToken(t *testing.T) {
+	dir := t.TempDir()
+	keychain := &clitest.Keychain{}
+	grant := config.Grant{
+		User:      config.User{ID: "u1", Email: "ada@example.com", Name: "Ada"},
+		Account:   config.Account{ID: "a1", Name: "Acme"},
+		Scopes:    []string{"schedules:write", "account:read"},
+		ExpiresAt: time.Date(2027, 1, 26, 12, 0, 0, 0, time.UTC),
+	}
+	if _, err := config.SaveCredential(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", Type: config.CredentialOAuthToken, Secret: token, Grant: grant}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := keychain.Get("chronos:api.chronos.sh", "default"); got != token {
+		t.Errorf("keychain holds %q, want the token", got)
+	}
+	wantFile := `{
+  "version": 1,
+  "profiles": {
+    "default": {
+      "credential": {
+        "type": "oauth_token",
+        "storage": "keychain",
+        "user": {
+          "id": "u1",
+          "email": "ada@example.com",
+          "name": "Ada"
+        },
+        "account": {
+          "id": "a1",
+          "name": "Acme"
+        },
+        "scopes": [
+          "schedules:write",
+          "account:read"
+        ],
+        "expires_at": "2027-01-26T12:00:00Z"
+      }
+    }
+  }
+}
+`
+	if file := readFile(t, config.Path(dir)); file != wantFile {
+		t.Errorf("config.json =\n%s\nwant\n%s", file, wantFile)
+	}
+	f, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, ok := f.Saved()
+	want := config.Credentials{Type: config.CredentialOAuthToken, Grant: grant, BaseURL: "https://api.chronos.sh", Source: config.SourceSaved, Storage: config.StorageKeychain}
+	if !ok || !reflect.DeepEqual(saved, want) {
+		t.Errorf("Saved = %+v, %v\nwant    %+v", saved, ok, want)
+	}
+}
+
+func TestSaveCredentialFallsBackToTheFileWithoutAKeychain(t *testing.T) {
 	dir := t.TempDir()
 	noKeychain := &clitest.Keychain{Err: config.KeychainError(keyring.ErrUnsupportedPlatform)}
-	saved, err := config.SaveAPIKey(config.SaveOptions{Dir: dir, Keychain: noKeychain, BaseURL: "https://staging.example.com", APIKey: key})
+	saved, err := config.SaveCredential(config.SaveOptions{Dir: dir, Keychain: noKeychain, BaseURL: "https://staging.example.com", Type: config.CredentialAPIKey, Secret: key})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +149,7 @@ func TestSaveAPIKeyFallsBackToTheFileWithoutAKeychain(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := config.Profile{BaseURL: "https://staging.example.com", Credential: fileKey(key)}
-	if got := f.Profiles[config.DefaultProfile]; got != want {
+	if got := f.Profiles[config.DefaultProfile]; !reflect.DeepEqual(got, want) {
 		t.Errorf("profile = %+v, want %+v", got, want)
 	}
 	if runtime.GOOS != "windows" {
@@ -97,7 +157,7 @@ func TestSaveAPIKeyFallsBackToTheFileWithoutAKeychain(t *testing.T) {
 	}
 }
 
-func TestSaveAPIKeyFailsWhenTheKeychainRefuses(t *testing.T) {
+func TestSaveCredentialFailsWhenTheKeychainRefuses(t *testing.T) {
 	tests := map[string]struct {
 		err  error
 		want string
@@ -108,7 +168,7 @@ func TestSaveAPIKeyFailsWhenTheKeychainRefuses(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			_, err := config.SaveAPIKey(config.SaveOptions{Dir: dir, Keychain: &clitest.Keychain{Err: tt.err}, BaseURL: "https://api.chronos.sh", APIKey: key})
+			_, err := config.SaveCredential(config.SaveOptions{Dir: dir, Keychain: &clitest.Keychain{Err: tt.err}, BaseURL: "https://api.chronos.sh", Type: config.CredentialAPIKey, Secret: key})
 			e, ok := errors.AsType[*exit.Error](err)
 			if !ok || e.Exit != exit.Failure || !strings.Contains(e.Message, tt.want) || !strings.Contains(e.Message, "CHRONOS_API_KEY") {
 				t.Fatalf("err = %v, want exit 1 naming %q and CHRONOS_API_KEY", err, tt.want)
@@ -120,14 +180,14 @@ func TestSaveAPIKeyFailsWhenTheKeychainRefuses(t *testing.T) {
 	}
 }
 
-func TestSaveAPIKeyWarnsAboutAnOldItemItCannotDelete(t *testing.T) {
+func TestSaveCredentialWarnsAboutAnOldItemItCannotDelete(t *testing.T) {
 	dir := t.TempDir()
 	keychain := &clitest.Keychain{}
-	if _, err := config.SaveAPIKey(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://staging.example.com", APIKey: key}); err != nil {
+	if _, err := config.SaveCredential(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://staging.example.com", Type: config.CredentialAPIKey, Secret: key}); err != nil {
 		t.Fatal(err)
 	}
 	keychain.Err = config.ErrNoKeychain
-	saved, err := config.SaveAPIKey(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", APIKey: key})
+	saved, err := config.SaveCredential(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", Type: config.CredentialAPIKey, Secret: key})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,12 +196,12 @@ func TestSaveAPIKeyWarnsAboutAnOldItemItCannotDelete(t *testing.T) {
 	}
 }
 
-func TestSaveAPIKeyDeletesAKeychainItemItReplaces(t *testing.T) {
+func TestSaveCredentialDeletesAKeychainItemItReplaces(t *testing.T) {
 	dir := t.TempDir()
 	keychain := &clitest.Keychain{}
 	save := func(baseURL string) {
 		t.Helper()
-		if _, err := config.SaveAPIKey(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: baseURL, APIKey: key}); err != nil {
+		if _, err := config.SaveCredential(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: baseURL, Type: config.CredentialAPIKey, Secret: key}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -156,7 +216,7 @@ func TestSaveAPIKeyDeletesAKeychainItemItReplaces(t *testing.T) {
 	}
 }
 
-func TestSaveAPIKeyRestoresTheKeychainWhenTheFileCannotBeSaved(t *testing.T) {
+func TestSaveCredentialRestoresTheKeychainWhenTheFileCannotBeSaved(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("directory modes do not block writes on Windows")
 	}
@@ -173,7 +233,7 @@ func TestSaveAPIKeyRestoresTheKeychainWhenTheFileCannotBeSaved(t *testing.T) {
 			dir := t.TempDir()
 			keychain := &clitest.Keychain{}
 			if tt.previous {
-				if _, err := config.SaveAPIKey(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", APIKey: key}); err != nil {
+				if _, err := config.SaveCredential(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", Type: config.CredentialAPIKey, Secret: key}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -181,7 +241,7 @@ func TestSaveAPIKeyRestoresTheKeychainWhenTheFileCannotBeSaved(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { os.Chmod(dir, 0o700) })
-			if _, err := config.SaveAPIKey(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", APIKey: newKey}); err == nil {
+			if _, err := config.SaveCredential(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", Type: config.CredentialAPIKey, Secret: newKey}); err == nil {
 				t.Fatal("save into a read-only directory succeeded")
 			}
 			got, err := keychain.Get("chronos:api.chronos.sh", "default")
@@ -201,21 +261,21 @@ func (unreadableKeychain) Get(string, string) (string, error) {
 	return "", config.ErrKeychainTimeout
 }
 
-func TestSaveAPIKeyKeepsAnItemItCouldNotReadWhenTheFileCannotBeSaved(t *testing.T) {
+func TestSaveCredentialKeepsAnItemItCouldNotReadWhenTheFileCannotBeSaved(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("directory modes do not block writes on Windows")
 	}
 	dir := t.TempDir()
 	keychain := &clitest.Keychain{}
-	if _, err := config.SaveAPIKey(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", APIKey: key}); err != nil {
+	if _, err := config.SaveCredential(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", Type: config.CredentialAPIKey, Secret: key}); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Chmod(dir, 0o700) })
-	opts := config.SaveOptions{Dir: dir, Keychain: unreadableKeychain{keychain}, BaseURL: "https://api.chronos.sh", APIKey: "chrns_xyz0123456789abcdefghijklmnopq"}
-	if _, err := config.SaveAPIKey(opts); err == nil {
+	opts := config.SaveOptions{Dir: dir, Keychain: unreadableKeychain{keychain}, BaseURL: "https://api.chronos.sh", Type: config.CredentialAPIKey, Secret: "chrns_xyz0123456789abcdefghijklmnopq"}
+	if _, err := config.SaveCredential(opts); err == nil {
 		t.Fatal("save into a read-only directory succeeded")
 	}
 	if _, err := keychain.Get("chronos:api.chronos.sh", "default"); err != nil {
@@ -229,7 +289,7 @@ func TestLoadSecret(t *testing.T) {
 	saved := config.Credentials{BaseURL: "https://api.chronos.sh", Source: config.SourceSaved, Storage: config.StorageKeychain}
 
 	got, err := config.LoadSecret(keychain, saved)
-	if err != nil || got.APIKey != key {
+	if err != nil || got.Secret != key {
 		t.Errorf("LoadSecret = %+v, %v", got, err)
 	}
 
@@ -265,7 +325,7 @@ func TestLoadSecretWhenTheKeychainIsUnreachable(t *testing.T) {
 func TestRemoveProfile(t *testing.T) {
 	dir := t.TempDir()
 	keychain := &clitest.Keychain{}
-	if _, err := config.SaveAPIKey(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", APIKey: key}); err != nil {
+	if _, err := config.SaveCredential(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", Type: config.CredentialAPIKey, Secret: key}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -289,7 +349,7 @@ func TestRemoveProfile(t *testing.T) {
 func TestRemoveProfileWarnsWhenTheKeychainFails(t *testing.T) {
 	dir := t.TempDir()
 	keychain := &clitest.Keychain{}
-	if _, err := config.SaveAPIKey(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", APIKey: key}); err != nil {
+	if _, err := config.SaveCredential(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", Type: config.CredentialAPIKey, Secret: key}); err != nil {
 		t.Fatal(err)
 	}
 	keychain.Err = errors.New("locked")
@@ -350,9 +410,9 @@ func TestSaveRefusesADirectoryOtherUsersCanChange(t *testing.T) {
 	os.Mkdir(dir, 0o700)
 	os.Chmod(dir, 0o770)
 	keychain := &clitest.Keychain{}
-	_, err := config.SaveAPIKey(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", APIKey: key})
+	_, err := config.SaveCredential(config.SaveOptions{Dir: dir, Keychain: keychain, BaseURL: "https://api.chronos.sh", Type: config.CredentialAPIKey, Secret: key})
 	if err == nil {
-		t.Fatal("SaveAPIKey succeeded, want a refusal")
+		t.Fatal("SaveCredential succeeded, want a refusal")
 	}
 	if _, err := keychain.Get("chronos:api.chronos.sh", "default"); !errors.Is(err, config.ErrSecretNotFound) {
 		t.Errorf("the key reached the keychain before the refusal: %v", err)

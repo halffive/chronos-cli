@@ -31,6 +31,7 @@ const (
 	CodeError           = "error"
 	CodeUsage           = "usage_error"
 	CodeAPIKeyMissing   = "api_key_missing"
+	CodeLoginExpired    = "login_expired"
 	CodeNetwork         = "network_error"
 	CodeOutcomeUnknown  = "outcome_unknown"
 	CodeJobUnsuccessful = "job_unsuccessful"
@@ -52,7 +53,7 @@ func Codes() []Description {
 		{Failure, "Any other failure."},
 		{Usage, "Bad flags or arguments, or a confirmation that needs --yes."},
 		{NotFound, "The resource does not exist."},
-		{Auth, "No usable API key, or the API rejected it."},
+		{Auth, "No usable login or API key, or the API rejected it."},
 		{Rejected, "The API rejected the request for validation, a conflict, a plan limit or a missing scope. Read error.code."},
 		{Retryable, "Safe to run again: rate limited, a read that failed, or a write that never left this machine."},
 		{OutcomeUnknown, "A write failed after it may have reached the API. Check its state before running the command again."},
@@ -70,8 +71,8 @@ type Error struct {
 	// Retryable marks a failure that is safe to repeat although its exit
 	// code is not Retryable, such as a wait that timed out on its own.
 	Retryable bool
-	// Cause is the API failure behind this one, whose status and request id
-	// are reported with it.
+	// Cause is the failure behind this one. An API failure's status and
+	// request id are reported with it.
 	Cause error
 }
 
@@ -89,6 +90,10 @@ func Usagef(format string, args ...any) *Error {
 
 func MissingKeyf(format string, args ...any) *Error {
 	return &Error{Exit: Auth, Code: CodeAPIKeyMissing, Message: fmt.Sprintf(format, args...)}
+}
+
+func LoginExpiredf(format string, args ...any) *Error {
+	return &Error{Exit: Auth, Code: CodeLoginExpired, Message: fmt.Sprintf(format, args...)}
 }
 
 // WithMessage replaces err's message and keeps the rest of its outcome: the
