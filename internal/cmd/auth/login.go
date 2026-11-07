@@ -2,10 +2,13 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
+	"os"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/spf13/cobra"
@@ -14,28 +17,35 @@ import (
 	"chronos.sh/cli/internal/cmdutil"
 	"chronos.sh/cli/internal/config"
 	"chronos.sh/cli/internal/exit"
+	"chronos.sh/cli/internal/oauth"
 	"chronos.sh/cli/internal/output"
 )
 
-const maxKeyLength = 1024
+const loginScope = "schedules:write jobs:write executions:read monitors:write account:read"
+
+const maxDeviceNameLength = 64
+
+type loginFlags struct {
+	withKey  bool
+	pasteKey bool
+}
 
 func newLoginCmd(f *app.Factory) *cobra.Command {
-	var withKey bool
+	var flags loginFlags
 	spec := cmdutil.CommandSpec{
 		Use:   "login",
-		Short: "Check an API key and save it for later commands",
-		Long: "Check an API key with the API and save it in the keychain, or in the config file on a machine that has no keychain. " +
-			"In a terminal, chronos asks for the key without showing it. " +
-			"The key is saved for the base URL in use, set by --base-url or CHRONOS_BASE_URL. " +
-			"To log in from a script, pipe the key in with --with-key, or skip login and set CHRONOS_API_KEY.",
-		Example: "  chronos auth login\n  chronos auth login --with-key < key.txt",
+		Short: "Log in with the browser, or save an API key",
+		Long: "Without flags, in a terminal, chronos opens the browser, where you log in and pick a workspace. " +
+			"A browser login acts as you, with your role in that workspace, until it expires or you run chronos auth logout. " +
+			"To save an API key instead, paste it hidden with --paste-key, or pipe it in with --with-key. " +
+			"chronos saves the login in the keychain, or in the config file on a machine that has no keychain. " +
+			"The login is saved for the base URL in use, set by --base-url or CHRONOS_BASE_URL. " +
+			"Scripts, CI and agents should skip login and set CHRONOS_API_KEY.",
+		Example: "  chronos auth login\n  chronos auth login --paste-key\n  chronos auth login --with-key < key.txt",
 	}
 	cmd := cmdutil.NewCommand(f, spec, func(ctx context.Context, _ *cobra.Command, _ []string) (output.View, error) {
-		if withKey && f.IO.InTTY {
-			return nil, exit.Usagef("--with-key reads the key from standard input, which is a terminal here, so the key would show as you paste it. Run chronos auth login without --with-key to paste it hidden, or pipe the key in with chronos auth login --with-key < key.txt.")
-		}
-		if !withKey && (f.JSON || !f.IO.InTTY) {
-			return nil, exit.Usagef("chronos auth login asks for the key only in a terminal and never with --json. Pipe the key in with --with-key, or set CHRONOS_API_KEY instead of logging in.")
+		if err := checkLoginFlags(f, flags); err != nil {
+			return nil, err
 		}
 		baseURL, source := config.ResolveBaseURLSource(f.Getenv, f.BaseURL)
 		if err := config.CheckBaseURL(baseURL); err != nil {
@@ -45,25 +55,27 @@ func newLoginCmd(f *app.Factory) *cobra.Command {
 		if !config.IsDefaultBaseURL(baseURL) {
 			p.Note("Logging in to %s, set by %s.", host(baseURL), source)
 		}
-		key, err := readKey(ctx, f, withKey)
-		if err != nil {
-			return nil, err
-		}
-		c, err := f.ClientWith(config.Credentials{APIKey: key, BaseURL: baseURL})
-		if err != nil {
-			return nil, err
-		}
-		account, err := c.Account.Get(ctx)
-		if err != nil {
-			return nil, rejectedKey(err, "The API rejected this key, so it was not saved. Copy the whole key from the dashboard and try again.")
-		}
 		dir, err := f.ConfigDir()
 		if err != nil {
 			return nil, err
 		}
-		saved, err := config.SaveAPIKey(config.SaveOptions{Dir: dir, Keychain: f.Keychain, BaseURL: baseURL, APIKey: key})
+		file, err := config.Load(dir)
 		if err != nil {
 			return nil, err
+		}
+		previous := savedOAuthToken(f, file)
+		var view output.View
+		var saved config.SaveResult
+		if flags.withKey || flags.pasteKey {
+			view, saved, err = loginWithKey(ctx, f, loginTarget{dir: dir, baseURL: baseURL}, flags.withKey)
+		} else {
+			view, saved, err = loginWithBrowser(ctx, f, loginTarget{dir: dir, baseURL: baseURL})
+		}
+		if err != nil {
+			return nil, err
+		}
+		if previous.Secret != "" {
+			revokeBestEffort(ctx, f, previous)
 		}
 		for _, warning := range saved.Warnings {
 			p.Note("Warning: %s", warning)
@@ -71,10 +83,147 @@ func newLoginCmd(f *app.Factory) *cobra.Command {
 		if config.EnvAPIKey(f.Getenv) != "" {
 			p.Note("CHRONOS_API_KEY is set, so commands keep using that key until you unset it.")
 		}
-		return statusView(saved.Credentials, account), nil
+		return view, nil
 	})
-	cmd.Flags().BoolVar(&withKey, "with-key", false, "Read the API key from standard input")
+	cmd.Flags().BoolVar(&flags.withKey, "with-key", false, "Read the API key from standard input")
+	cmd.Flags().BoolVar(&flags.pasteKey, "paste-key", false, "Paste an API key in the terminal instead of logging in with the browser")
+	cmd.MarkFlagsMutuallyExclusive("with-key", "paste-key")
 	return cmd
+}
+
+func checkLoginFlags(f *app.Factory, flags loginFlags) error {
+	interactive := f.IO.InTTY && !f.JSON
+	switch {
+	case flags.withKey && f.IO.InTTY:
+		return exit.Usagef("--with-key reads the key from standard input, which is a terminal here, so the key would show as you paste it. Run chronos auth login --paste-key to paste it hidden, or pipe the key in with chronos auth login --with-key < key.txt.")
+	case flags.pasteKey && !interactive:
+		return exit.Usagef("--paste-key asks for the key only in a terminal and never with --json. Pipe the key in with --with-key, or set CHRONOS_API_KEY instead of logging in.")
+	case !flags.withKey && !flags.pasteKey && !interactive:
+		return exit.Usagef("chronos auth login opens the browser only from a terminal and never with --json. Pipe an API key in with --with-key, or set CHRONOS_API_KEY instead of logging in.")
+	}
+	return nil
+}
+
+type loginTarget struct {
+	dir     string
+	baseURL string
+}
+
+func savedOAuthToken(f *app.Factory, file *config.File) config.Credentials {
+	saved, ok := file.Saved()
+	if !ok || saved.Type != config.CredentialOAuthToken {
+		return config.Credentials{}
+	}
+	saved, err := config.LoadSecret(f.Keychain, saved)
+	if err != nil {
+		return config.Credentials{}
+	}
+	return saved
+}
+
+func revokeBestEffort(ctx context.Context, f *app.Factory, creds config.Credentials) {
+	client, err := f.OAuthClient(creds.BaseURL)
+	if err != nil {
+		return
+	}
+	client.RevokeBestEffort(ctx, creds.Secret)
+}
+
+func loginWithKey(ctx context.Context, f *app.Factory, target loginTarget, fromStdin bool) (output.View, config.SaveResult, error) {
+	key, err := readKey(ctx, f, fromStdin)
+	if err != nil {
+		return nil, config.SaveResult{}, err
+	}
+	c, err := f.ClientWith(config.Credentials{Secret: key, BaseURL: target.baseURL})
+	if err != nil {
+		return nil, config.SaveResult{}, err
+	}
+	account, err := c.Account.Get(ctx)
+	if err != nil {
+		return nil, config.SaveResult{}, rejectedKey(err, "The API rejected this key, so it was not saved. Copy the whole key from the dashboard and try again.")
+	}
+	saved, err := config.SaveCredential(config.SaveOptions{Dir: target.dir, Keychain: f.Keychain, BaseURL: target.baseURL, Type: config.CredentialAPIKey, Secret: key})
+	if err != nil {
+		return nil, config.SaveResult{}, err
+	}
+	return statusView(saved.Credentials, account), saved, nil
+}
+
+func loginWithBrowser(ctx context.Context, f *app.Factory, target loginTarget) (output.View, config.SaveResult, error) {
+	client, err := f.OAuthClient(target.baseURL)
+	if err != nil {
+		return nil, config.SaveResult{}, err
+	}
+	timeout := f.LoginTimeout
+	if timeout == 0 {
+		timeout = app.DefaultLoginTimeout
+	}
+	p := f.Printer()
+	token, err := client.Login(ctx, oauth.LoginOptions{
+		Scope:      loginScope,
+		DeviceName: deviceName(),
+		Timeout:    timeout,
+		OpenBrowser: func(authorizeURL string) {
+			p.Note("Opening the browser to log in. If it does not open, visit this URL:\n%s", authorizeURL)
+			if err := openBrowser(f, authorizeURL); err != nil {
+				p.Note("Could not open the browser (%v). Visit the URL above to log in.", err)
+			}
+			p.Note("Waiting for you to approve the login in the browser. Press Ctrl-C to cancel.")
+		},
+		Ignored: func() {
+			p.Note("Ignored a request that was not part of this login. Still waiting for the browser.")
+		},
+	})
+	if err != nil {
+		return nil, config.SaveResult{}, err
+	}
+	grant := config.Grant{User: token.User, Account: token.Account, Scopes: token.Scopes}
+	if token.ExpiresIn > 0 {
+		grant.ExpiresAt = f.Now().Add(token.ExpiresIn).UTC().Truncate(time.Second)
+	}
+	saved, err := config.SaveCredential(config.SaveOptions{
+		Dir:      target.dir,
+		Keychain: f.Keychain,
+		BaseURL:  target.baseURL,
+		Type:     config.CredentialOAuthToken,
+		Secret:   token.AccessToken,
+		Grant:    grant,
+	})
+	if err != nil {
+		client.RevokeBestEffort(ctx, token.AccessToken)
+		return nil, config.SaveResult{}, err
+	}
+	return loggedInView(saved.Credentials), saved, nil
+}
+
+func loggedInView(creds config.Credentials) output.View {
+	return output.ViewOf(nil, func(p *output.Printer) error {
+		_, err := fmt.Fprintf(p.Out, "Logged in as %s to %s.\n", output.CleanLine(creds.Grant.User.Email), output.CleanLine(creds.Grant.Account.Name))
+		return err
+	})
+}
+
+func openBrowser(f *app.Factory, url string) error {
+	if f.OpenBrowser == nil {
+		return errors.New("no browser is available")
+	}
+	return f.OpenBrowser(url)
+}
+
+// deviceName keeps only printable ASCII, since the API rejects any other
+// device_name.
+func deviceName() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	name := strings.Map(func(r rune) rune {
+		if r < 0x20 || r > 0x7e {
+			return -1
+		}
+		return r
+	}, hostname)
+	return strings.TrimSpace(name[:min(len(name), maxDeviceNameLength)])
 }
 
 func host(baseURL string) string {
@@ -94,7 +243,7 @@ func readKey(ctx context.Context, f *app.Factory, fromStdin bool) (string, error
 	switch {
 	case key == "":
 		return "", exit.Usagef("No API key was given. Copy a key from the dashboard and try again.")
-	case len(key) > maxKeyLength, strings.ContainsFunc(key, unicode.IsControl):
+	case len(key) > config.MaxSecretLength, strings.ContainsFunc(key, unicode.IsControl):
 		return "", exit.Usagef("That is not an API key. Copy the key again from the dashboard.")
 	}
 	return key, nil
@@ -103,7 +252,7 @@ func readKey(ctx context.Context, f *app.Factory, fromStdin bool) (string, error
 func readRawKey(ctx context.Context, f *app.Factory, fromStdin bool) (string, error) {
 	if fromStdin {
 		return app.ReadWithContext(ctx, func() (string, error) {
-			b, err := io.ReadAll(io.LimitReader(f.IO.In, maxKeyLength+1))
+			b, err := io.ReadAll(io.LimitReader(f.IO.In, config.MaxSecretLength+1))
 			return string(b), err
 		})
 	}

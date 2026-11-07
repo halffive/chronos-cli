@@ -40,13 +40,19 @@ type Sent struct {
 	// WriteApplied is true when a write got a 2xx earlier in the run, so
 	// running the command again would repeat it.
 	WriteApplied bool
+	// OAuthToken is true when the requests carried a saved OAuth token, so a
+	// 401 means the login has ended.
+	OAuthToken bool
 }
 
-// Classify maps err to an Outcome. After an applied write, a retryable
-// failure becomes outcome_unknown, since running the command again would
-// repeat the write.
+// Classify maps err to an Outcome. A 401 on a saved OAuth token becomes
+// login_expired. After an applied write, a retryable failure becomes
+// outcome_unknown, since running the command again would repeat the write.
 func Classify(err error, sent Sent) Outcome {
 	o := classify(err, sent.LastMethod)
+	if sent.OAuthToken && o.Exit == Auth && o.Status != nil && *o.Status == http.StatusUnauthorized {
+		o.Code, o.Message = CodeLoginExpired, loginEndedMessage
+	}
 	if !sent.WriteApplied {
 		return o
 	}
@@ -56,6 +62,8 @@ func Classify(err error, sent Sent) Outcome {
 	}
 	return o
 }
+
+const loginEndedMessage = "Your login has expired or was revoked. Run chronos auth login to log in again, or set CHRONOS_API_KEY."
 
 const writeAppliedSuffix = ". An earlier request in this command was applied, so check its state before running the command again."
 

@@ -55,11 +55,11 @@ Upgrade the same way you installed. `chronos` does not check for updates, so wat
 - Go: run `go install chronos.sh/cli/cmd/chronos@latest`.
 - Release archive: download the new archive from the releases page. Replace the old binary with the one inside.
 
-Your saved API key and config stay in place.
+Your saved login and config stay in place.
 
 ## Uninstall
 
-1. Remove your saved API key from the OS keychain and the config file:
+1. Log out. This revokes a browser login and removes the saved login from the OS keychain and the config file:
 
    ```sh
    chronos auth logout

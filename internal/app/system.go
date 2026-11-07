@@ -13,7 +13,7 @@ import (
 )
 
 func NewSystemFactory() *Factory {
-	return &Factory{IO: systemIO(), Getenv: os.Getenv, Now: time.Now, Keychain: config.SystemKeychain{}}
+	return &Factory{IO: systemIO(), Getenv: os.Getenv, Now: time.Now, Keychain: config.SystemKeychain{}, OpenBrowser: OpenBrowser}
 }
 
 func InterruptSignals() []os.Signal {
