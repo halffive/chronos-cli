@@ -26,5 +26,5 @@ func checkOthersCannotRead(path string, info fs.FileInfo) error {
 	if info.Mode().Perm()&0o044 == 0 {
 		return nil
 	}
-	return exit.Failuref("%s holds your API key and other users can read it, so chronos will not use it. Run chmod 600 %s.", path, path)
+	return exit.Failuref("%s holds your saved login and other users can read it, so chronos will not use it. Run chmod 600 %s.", path, path)
 }

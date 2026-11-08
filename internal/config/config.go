@@ -1,5 +1,6 @@
-// Package config stores saved API keys in the keychain or the config file and
-// decides which API key and base URL a command uses.
+// Package config saves a login (an API key or an OAuth token) in the
+// keychain or the config file, and decides which credential and base URL a
+// command uses.
 package config
 
 import (
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	chronos "chronos.sh/go"
 
@@ -23,6 +25,8 @@ const (
 	currentVersion = 1
 
 	DefaultProfile = "default"
+
+	MaxSecretLength = 1024
 )
 
 // Env reads an environment variable. os.Getenv in production.
@@ -41,7 +45,10 @@ type Profile struct {
 
 type CredentialType string
 
-const CredentialAPIKey CredentialType = "api_key"
+const (
+	CredentialAPIKey     CredentialType = "api_key"
+	CredentialOAuthToken CredentialType = "oauth_token"
+)
 
 type Storage string
 
@@ -56,10 +63,36 @@ type Credential struct {
 	Type    CredentialType `json:"type"`
 	Storage Storage        `json:"storage"`
 	Secret  string         `json:"secret,omitempty"`
+	Grant
 }
 
-func (p Profile) hasAPIKey() bool {
-	if p.Credential.Type != CredentialAPIKey {
+// Grant is what a browser login was granted: the person and workspace an
+// OAuth token acts as, its scopes and when it expires. It is empty for an
+// API key.
+type Grant struct {
+	User      User      `json:"user,omitzero"`
+	Account   Account   `json:"account,omitzero"`
+	Scopes    []string  `json:"scopes,omitempty"`
+	ExpiresAt time.Time `json:"expires_at,omitzero"`
+}
+
+type User struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+	Name  string `json:"name"`
+}
+
+type Account struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (g Grant) Expired(now time.Time) bool {
+	return !g.ExpiresAt.IsZero() && !now.Before(g.ExpiresAt)
+}
+
+func (p Profile) hasSecret() bool {
+	if p.Credential.Type != CredentialAPIKey && p.Credential.Type != CredentialOAuthToken {
 		return false
 	}
 	switch p.Credential.Storage {
@@ -112,7 +145,7 @@ func Empty() *File {
 
 // Load reads the config file in dir. A missing file is an empty config. A
 // config file or directory that other users can change is refused, since the
-// file decides where the saved key is sent.
+// file decides where the saved login is sent.
 func Load(dir string) (*File, error) {
 	path := Path(dir)
 	info, err := os.Stat(path)
@@ -213,7 +246,7 @@ func checkPrivateDir(dir string) error {
 	return checkPrivate(dir, info)
 }
 
-// Source says where an API key came from.
+// Source says where a credential came from.
 type Source string
 
 const (
@@ -221,15 +254,17 @@ const (
 	SourceSaved Source = "saved"
 )
 
-// Credentials are the key and base URL a command uses. APIKey is empty when
-// no key is available, and for a key in the keychain until LoadSecret reads
-// it.
+// Credentials are what a command authenticates with and the base URL it
+// calls. Secret is the API key or OAuth token. It is empty when there is
+// none, and for one in the keychain until LoadSecret reads it.
 type Credentials struct {
-	APIKey  string
+	Secret  string
+	Type    CredentialType
+	Grant   Grant
 	BaseURL string
 	Source  Source
 	Storage Storage
-	// SavedFor is set when a saved key exists but was not used because it
+	// SavedFor is set when a saved login exists but was not used because it
 	// belongs to this other base URL.
 	SavedFor string
 }
@@ -261,36 +296,47 @@ func EnvAPIKey(env Env) string {
 	return strings.TrimSpace(env("CHRONOS_API_KEY"))
 }
 
-// Resolve picks the key and base URL. CHRONOS_API_KEY beats the saved key.
-// A saved key is only sent to the base URL it was saved for, so pointing
-// --base-url or CHRONOS_BASE_URL elsewhere never leaks it.
+// Resolve picks the credential and base URL. CHRONOS_API_KEY beats the
+// saved login. A saved login is only sent to the base URL it was saved for,
+// so pointing --base-url or CHRONOS_BASE_URL elsewhere never leaks it.
 func (f *File) Resolve(env Env, baseURLFlag string) Credentials {
 	baseURL, source := ResolveBaseURLSource(env, baseURLFlag)
 	if key := EnvAPIKey(env); key != "" {
-		return Credentials{APIKey: key, BaseURL: baseURL, Source: SourceEnv}
+		return Credentials{Secret: key, Type: CredentialAPIKey, BaseURL: baseURL, Source: SourceEnv}
 	}
-	profile, saved := f.Profiles[DefaultProfile]
-	if !saved || !profile.hasAPIKey() {
+	saved, ok := f.Saved()
+	if !ok {
 		return Credentials{BaseURL: baseURL}
 	}
-	savedFor := profile.savedFor()
-	if source != "" && normalizeURL(baseURL) != normalizeURL(savedFor) {
-		return Credentials{BaseURL: baseURL, SavedFor: savedFor}
+	if source != "" && normalizeURL(baseURL) != normalizeURL(saved.BaseURL) {
+		return Credentials{BaseURL: baseURL, SavedFor: saved.BaseURL}
+	}
+	return saved
+}
+
+// Saved returns the saved login with the base URL it was saved for, whatever
+// the environment says.
+func (f *File) Saved() (Credentials, bool) {
+	profile, saved := f.Profiles[DefaultProfile]
+	if !saved || !profile.hasSecret() {
+		return Credentials{}, false
 	}
 	return Credentials{
-		APIKey:  profile.Credential.Secret,
-		BaseURL: savedFor,
+		Secret:  profile.Credential.Secret,
+		Type:    profile.Credential.Type,
+		Grant:   profile.Credential.Grant,
+		BaseURL: profile.savedFor(),
 		Source:  SourceSaved,
 		Storage: profile.Credential.Storage,
-	}
+	}, true
 }
 
 func normalizeURL(u string) string {
 	return strings.TrimRight(strings.TrimSpace(u), "/")
 }
 
-// CheckBaseURL rejects plain HTTP to anything but this machine, since the API
-// key would cross the network unencrypted.
+// CheckBaseURL rejects plain HTTP to anything but this machine, since the
+// credential would cross the network unencrypted.
 func CheckBaseURL(raw string) error {
 	u, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || u.Host == "" {

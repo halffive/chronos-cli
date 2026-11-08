@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -22,7 +23,7 @@ func TestSaveThenLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Profiles[config.DefaultProfile] != want.Profiles[config.DefaultProfile] {
+	if !reflect.DeepEqual(got.Profiles[config.DefaultProfile], want.Profiles[config.DefaultProfile]) {
 		t.Errorf("loaded %+v, want %+v", got.Profiles, want.Profiles)
 	}
 
@@ -111,6 +112,10 @@ func TestResolve(t *testing.T) {
 	inKeychain := &config.File{Version: 1, Profiles: map[string]config.Profile{
 		config.DefaultProfile: {Credential: keychainKey},
 	}}
+	grant := config.Grant{User: config.User{ID: "u1", Email: "ada@example.com"}, Scopes: []string{"account:read"}}
+	oauthToken := &config.File{Version: 1, Profiles: map[string]config.Profile{
+		config.DefaultProfile: {Credential: config.Credential{Type: config.CredentialOAuthToken, Storage: config.StorageKeychain, Grant: grant}},
+	}}
 	futureCredential := &config.File{Version: 1, Profiles: map[string]config.Profile{
 		config.DefaultProfile: {Credential: config.Credential{Type: "user_token", Storage: config.StorageKeychain}},
 	}}
@@ -124,18 +129,23 @@ func TestResolve(t *testing.T) {
 		{
 			name: "saved key keeps its base URL",
 			file: stagingKey,
-			want: config.Credentials{APIKey: "chrns_staging", BaseURL: "https://staging.example.com", Source: config.SourceSaved, Storage: config.StorageFile},
+			want: config.Credentials{Secret: "chrns_staging", Type: config.CredentialAPIKey, BaseURL: "https://staging.example.com", Source: config.SourceSaved, Storage: config.StorageFile},
 		},
 		{
 			name: "saved key with its own base URL given again",
 			file: stagingKey,
 			env:  map[string]string{"CHRONOS_BASE_URL": "https://staging.example.com/"},
-			want: config.Credentials{APIKey: "chrns_staging", BaseURL: "https://staging.example.com", Source: config.SourceSaved, Storage: config.StorageFile},
+			want: config.Credentials{Secret: "chrns_staging", Type: config.CredentialAPIKey, BaseURL: "https://staging.example.com", Source: config.SourceSaved, Storage: config.StorageFile},
 		},
 		{
 			name: "key in the keychain is left for LoadSecret",
 			file: inKeychain,
-			want: config.Credentials{BaseURL: "https://api.chronos.sh", Source: config.SourceSaved, Storage: config.StorageKeychain},
+			want: config.Credentials{Type: config.CredentialAPIKey, BaseURL: "https://api.chronos.sh", Source: config.SourceSaved, Storage: config.StorageKeychain},
+		},
+		{
+			name: "an OAuth token keeps its grant",
+			file: oauthToken,
+			want: config.Credentials{Type: config.CredentialOAuthToken, Grant: grant, BaseURL: "https://api.chronos.sh", Source: config.SourceSaved, Storage: config.StorageKeychain},
 		},
 		{
 			name: "an unknown credential type counts as no key",
@@ -159,13 +169,13 @@ func TestResolve(t *testing.T) {
 			name: "env key goes wherever the base URL points",
 			file: stagingKey,
 			env:  map[string]string{"CHRONOS_API_KEY": "chrns_env", "CHRONOS_BASE_URL": "http://localhost:3000"},
-			want: config.Credentials{APIKey: "chrns_env", BaseURL: "http://localhost:3000", Source: config.SourceEnv},
+			want: config.Credentials{Secret: "chrns_env", Type: config.CredentialAPIKey, BaseURL: "http://localhost:3000", Source: config.SourceEnv},
 		},
 		{
 			name: "env key with no base URL uses the default, not the saved one",
 			file: stagingKey,
 			env:  map[string]string{"CHRONOS_API_KEY": "chrns_env"},
-			want: config.Credentials{APIKey: "chrns_env", BaseURL: "https://api.chronos.sh", Source: config.SourceEnv},
+			want: config.Credentials{Secret: "chrns_env", Type: config.CredentialAPIKey, BaseURL: "https://api.chronos.sh", Source: config.SourceEnv},
 		},
 		{
 			name: "no key",
@@ -176,7 +186,7 @@ func TestResolve(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.file.Resolve(func(k string) string { return tt.env[k] }, tt.flag)
-			if got != tt.want {
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Resolve = %+v\nwant      %+v", got, tt.want)
 			}
 		})
@@ -220,7 +230,7 @@ func TestCheckBaseURLBypasses(t *testing.T) {
 func TestResolveTrimsTheEnvKey(t *testing.T) {
 	saved := &config.File{Version: 1, Profiles: map[string]config.Profile{config.DefaultProfile: {Credential: fileKey("chrns_saved")}}}
 	got := saved.Resolve(func(k string) string { return map[string]string{"CHRONOS_API_KEY": "  \n"}[k] }, "")
-	if got.APIKey != "chrns_saved" || got.Source != config.SourceSaved {
+	if got.Secret != "chrns_saved" || got.Source != config.SourceSaved {
 		t.Errorf("a blank env key hid the saved key: %+v", got)
 	}
 }

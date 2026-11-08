@@ -388,6 +388,23 @@ func TestSavedKeyStaysWithItsBaseURL(t *testing.T) {
 	}
 }
 
+func TestUnauthorizedOnABrowserLoginIsLoginExpired(t *testing.T) {
+	api := clitest.NewAPI(t, clitest.Failure{Status: 401, Code: "unauthorized", Message: "Unauthorized"}.Response())
+	dir := t.TempDir()
+	saved := &config.File{Version: 1, Profiles: map[string]config.Profile{config.DefaultProfile: {
+		BaseURL:    api.URL,
+		Credential: config.Credential{Type: config.CredentialOAuthToken, Storage: config.StorageFile, Secret: "chrns_oat_abcdefghijklmnopqrstuvwxyz0Ab1Cd"},
+	}}}
+	if err := config.Save(dir, saved); err != nil {
+		t.Fatal(err)
+	}
+	res := runProbe(t, map[string]string{"CHRONOS_CONFIG_DIR": dir}, "--json", "probe", "read", "s1")
+	got := clitest.DecodeError(t, res.Stderr)
+	if res.Code != exit.Auth || got.Code != exit.CodeLoginExpired || got.RequestID == nil {
+		t.Errorf("exit = %d, error = %+v", res.Code, got)
+	}
+}
+
 func TestPlainHTTPOnlyForLocalhost(t *testing.T) {
 	res := runProbe(t, map[string]string{"CHRONOS_API_KEY": clitest.APIKey, "CHRONOS_BASE_URL": "http://api.chronos.sh"}, "--json", "probe", "read", "s1")
 	if res.Code != exit.Usage {

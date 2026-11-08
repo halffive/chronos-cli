@@ -81,3 +81,30 @@ func TestWithMessageKeepsTheAPIOutcome(t *testing.T) {
 		}
 	}
 }
+
+func TestUnauthorizedOnAnOAuthTokenIsLoginExpired(t *testing.T) {
+	unauthorized := &chronos.APIError{StatusCode: 401, Code: "unauthorized", Message: "Unauthorized", RequestID: "req_1"}
+	forbidden := &chronos.APIError{StatusCode: 403, Code: "insufficient_scope", Message: "Missing required scope: jobs:read"}
+	tests := []struct {
+		name string
+		err  error
+		sent exit.Sent
+		want string
+	}{
+		{"401 on an OAuth token", unauthorized, exit.Sent{LastMethod: "GET", OAuthToken: true}, exit.CodeLoginExpired},
+		{"401 on an API key", unauthorized, exit.Sent{LastMethod: "GET"}, "unauthorized"},
+		{"403 on an OAuth token", forbidden, exit.Sent{LastMethod: "GET", OAuthToken: true}, "insufficient_scope"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := exit.Classify(tt.err, tt.sent)
+			if got.Code != tt.want {
+				t.Errorf("code = %q, want %q", got.Code, tt.want)
+			}
+		})
+	}
+	got := exit.Classify(unauthorized, exit.Sent{LastMethod: "GET", OAuthToken: true})
+	if got.Exit != exit.Auth || got.RequestID == nil || *got.RequestID != "req_1" {
+		t.Errorf("login_expired lost its exit code or request id: %+v", got)
+	}
+}

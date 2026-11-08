@@ -31,7 +31,7 @@ func TestLoginWithKeyFromStdin(t *testing.T) {
 	if res.Code != exit.OK {
 		t.Fatalf("exit = %d, stderr: %s", res.Code, res.Stderr)
 	}
-	golden(t, "login", api, res.Stdout)
+	golden(t, "login", api.URL, res.Stdout)
 	assertNoKey(t, res)
 
 	requests := api.Requests()
@@ -52,10 +52,10 @@ func TestLoginWithKeyFromStdin(t *testing.T) {
 	}
 }
 
-func TestLoginOnATerminal(t *testing.T) {
+func TestLoginWithAPastedKey(t *testing.T) {
 	api := clitest.NewAPI(t, account())
 	res := clitest.Run(t, clitest.Options{
-		Args:      []string{"auth", "login"},
+		Args:      []string{"auth", "login", "--paste-key"},
 		Env:       map[string]string{"CHRONOS_BASE_URL": api.URL},
 		StdinTTY:  true,
 		StdoutTTY: true,
@@ -64,15 +64,17 @@ func TestLoginOnATerminal(t *testing.T) {
 	if res.Code != exit.OK {
 		t.Fatalf("exit = %d, stderr: %s", res.Code, res.Stderr)
 	}
-	golden(t, "login_terminal", api, res.Stdout)
-	golden(t, "login_terminal_stderr", api, res.Stderr)
+	golden(t, "login_paste_key", api.URL, res.Stdout)
+	golden(t, "login_paste_key_stderr", api.URL, res.Stderr)
 	assertNoKey(t, res)
 }
 
 func TestLoginNeedsWithKeyWhenItCannotPrompt(t *testing.T) {
 	tests := map[string]clitest.Options{
-		"no terminal":          {Args: []string{"auth", "login"}},
-		"--json on a terminal": {Args: []string{"auth", "login", "--json"}, StdinTTY: true},
+		"no terminal":                    {Args: []string{"auth", "login"}},
+		"--json on a terminal":           {Args: []string{"auth", "login", "--json"}, StdinTTY: true},
+		"--paste-key without a terminal": {Args: []string{"auth", "login", "--paste-key"}},
+		"--paste-key with --json":        {Args: []string{"auth", "login", "--paste-key", "--json"}, StdinTTY: true},
 	}
 	for name, opts := range tests {
 		t.Run(name, func(t *testing.T) {

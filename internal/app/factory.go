@@ -16,6 +16,7 @@ import (
 	"chronos.sh/cli/internal/build"
 	"chronos.sh/cli/internal/config"
 	"chronos.sh/cli/internal/exit"
+	"chronos.sh/cli/internal/oauth"
 	"chronos.sh/cli/internal/output"
 	"chronos.sh/cli/internal/transport"
 )
@@ -44,9 +45,15 @@ type Factory struct {
 	// JobPollInterval is the time between checks while waiting for a job.
 	// Zero is the SDK's default.
 	JobPollInterval time.Duration
-	// Keychain holds saved API keys. Nil means the machine has no keychain,
+	// Keychain holds saved logins. Nil means the machine has no keychain,
 	// so a Factory built by hand never reaches the system one.
 	Keychain config.Keychain
+	// OpenBrowser opens a URL in the browser. Nil means there is none, so a
+	// Factory built by hand never opens the system one.
+	OpenBrowser func(url string) error
+	// LoginTimeout bounds the wait for the browser login. Zero is
+	// DefaultLoginTimeout.
+	LoginTimeout time.Duration
 
 	JSON    bool
 	BaseURL string
@@ -54,7 +61,12 @@ type Factory struct {
 
 	recorder    *transport.Recorder
 	credentials *config.Credentials
+	oauthToken  bool
 }
+
+// DefaultLoginTimeout matches how long the API keeps an authorization
+// request open.
+const DefaultLoginTimeout = 10 * time.Minute
 
 func (f *Factory) Printer() *output.Printer {
 	return &output.Printer{
@@ -81,9 +93,9 @@ func (f *Factory) Config() (*config.File, error) {
 	return config.Load(dir)
 }
 
-// Credentials resolves the key and base URL once per run, so the keychain
-// prompts at most once. The config file is not read when CHRONOS_API_KEY is
-// set, so a broken file cannot block an env key.
+// Credentials resolves the credential and base URL once per run, so the
+// keychain prompts at most once. The config file is not read when
+// CHRONOS_API_KEY is set, so a broken file cannot block an env key.
 func (f *Factory) Credentials() (config.Credentials, error) {
 	if f.credentials != nil {
 		return *f.credentials, nil
@@ -115,24 +127,30 @@ func (f *Factory) Client() (*chronos.Client, error) {
 		return nil, err
 	}
 	switch {
-	case strings.ContainsFunc(creds.APIKey, unicode.IsControl):
+	case strings.ContainsFunc(creds.Secret, unicode.IsControl):
 		return nil, controlCharactersError(creds.Source)
-	case creds.APIKey != "":
+	case creds.Grant.Expired(f.Now()) && !f.DryRun:
+		return nil, exit.LoginExpiredf("Your login expired on %s. Run chronos auth login to log in again, or set CHRONOS_API_KEY.", creds.Grant.ExpiresAt.Format(time.DateOnly))
+	case creds.Secret != "":
 	case f.DryRun:
-		creds.APIKey = dryRunKey
+		creds.Secret = dryRunKey
 	case creds.SavedFor != "":
-		return nil, exit.MissingKeyf("Your saved key is for %s, not %s. Set CHRONOS_API_KEY to use a key with %s.", creds.SavedFor, creds.BaseURL, creds.BaseURL)
+		return nil, exit.MissingKeyf("Your saved login is for %s, not %s. Set CHRONOS_API_KEY to use a key with %s.", creds.SavedFor, creds.BaseURL, creds.BaseURL)
 	default:
-		return nil, exit.MissingKeyf("No API key found. Set CHRONOS_API_KEY, or run chronos auth login.")
+		return nil, exit.MissingKeyf("You are not logged in. Run chronos auth login, or set CHRONOS_API_KEY.")
 	}
-	return f.ClientWith(creds)
+	c, err := f.ClientWith(creds)
+	if err == nil && creds.Type == config.CredentialOAuthToken {
+		f.oauthToken = true
+	}
+	return c, err
 }
 
 func controlCharactersError(source config.Source) error {
 	if source == config.SourceEnv {
 		return exit.MissingKeyf("The API key in CHRONOS_API_KEY contains control characters. Copy it again from the dashboard.")
 	}
-	return exit.MissingKeyf("Your saved key contains control characters. Run chronos auth login with a key copied again from the dashboard.")
+	return exit.MissingKeyf("Your saved login contains control characters. Run chronos auth login again.")
 }
 
 // ClientWith returns a client for creds. All clients in a run share one
@@ -141,24 +159,44 @@ func (f *Factory) ClientWith(creds config.Credentials) (*chronos.Client, error) 
 	if err := config.CheckBaseURL(creds.BaseURL); err != nil {
 		return nil, err
 	}
-	if f.recorder == nil {
-		f.recorder = &transport.Recorder{}
-	}
-	f.recorder.DryRun = f.DryRun
 	opts := append([]chronos.Option{
 		chronos.WithBaseURL(creds.BaseURL),
-		chronos.WithHTTPClient(&http.Client{Transport: f.recorder}),
-		chronos.WithUserAgent("chronos-cli/" + build.Current().Version),
+		chronos.WithHTTPClient(&http.Client{Transport: f.transport()}),
+		chronos.WithUserAgent(userAgent()),
 	}, f.ClientOptions...)
 	if f.DryRun {
 		// The SDK retries a failed GET, and a captured request is a failure.
 		opts = append(opts, chronos.WithMaxRequestRetries(0))
 	}
-	c, err := chronos.NewClient(creds.APIKey, opts...)
+	c, err := chronos.NewClient(creds.Secret, opts...)
 	if err != nil {
 		return nil, exit.Usagef("%s", exit.Sentence(strings.TrimPrefix(err.Error(), "chronos: ")))
 	}
 	return c, nil
+}
+
+// OAuthClient shares the run's recorder, so Sent sees the OAuth requests too.
+func (f *Factory) OAuthClient(baseURL string) (*oauth.Client, error) {
+	if err := config.CheckBaseURL(baseURL); err != nil {
+		return nil, err
+	}
+	return &oauth.Client{
+		BaseURL:    baseURL,
+		HTTPClient: &http.Client{Transport: f.transport(), Timeout: chronos.DefaultRequestTimeout},
+		UserAgent:  userAgent(),
+	}, nil
+}
+
+func (f *Factory) transport() *transport.Recorder {
+	if f.recorder == nil {
+		f.recorder = &transport.Recorder{}
+	}
+	f.recorder.DryRun = f.DryRun
+	return f.recorder
+}
+
+func userAgent() string {
+	return "chronos-cli/" + build.Current().Version
 }
 
 // Sent reports what this run has sent, for classifying a failure.
@@ -166,5 +204,5 @@ func (f *Factory) Sent() exit.Sent {
 	if f.recorder == nil {
 		return exit.Sent{}
 	}
-	return exit.Sent{LastMethod: f.recorder.LastMethod(), WriteApplied: f.recorder.WriteApplied()}
+	return exit.Sent{LastMethod: f.recorder.LastMethod(), WriteApplied: f.recorder.WriteApplied(), OAuthToken: f.oauthToken}
 }

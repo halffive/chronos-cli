@@ -43,7 +43,7 @@ func TestStatusJSON(t *testing.T) {
 			if res.Code != exit.OK {
 				t.Fatalf("exit = %d, stderr: %s", res.Code, res.Stderr)
 			}
-			golden(t, "status_"+tt.name, api, res.Stdout)
+			golden(t, "status_"+tt.name, api.URL, res.Stdout)
 			assertNoKey(t, res)
 		})
 	}
@@ -65,7 +65,7 @@ func TestStatusHumanOutput(t *testing.T) {
 			if res.Code != exit.OK {
 				t.Fatalf("exit = %d, stderr: %s", res.Code, res.Stderr)
 			}
-			golden(t, "status_human_"+name, api, res.Stdout)
+			golden(t, "status_human_"+name, api.URL, res.Stdout)
 			assertNoKey(t, res)
 		})
 	}
@@ -131,6 +131,6 @@ func TestStatusWithARejectedKey(t *testing.T) {
 	if res.Code != exit.Auth || got.Code != "unauthorized" || got.Status == nil || *got.Status != 401 {
 		t.Fatalf("exit = %d, error = %+v", res.Code, got)
 	}
-	golden(t, "status_rejected", api, res.Stderr)
+	golden(t, "status_rejected", api.URL, res.Stderr)
 	assertNoKey(t, res)
 }

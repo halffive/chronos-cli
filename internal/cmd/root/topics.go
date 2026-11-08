@@ -37,8 +37,8 @@ type variableJSON struct {
 }
 
 var variables = []variableJSON{
-	{"CHRONOS_API_KEY", "API key. Overrides the key saved by chronos auth login."},
-	{"CHRONOS_BASE_URL", "API base URL. Defaults to https://api.chronos.sh. A saved key is only sent to the base URL it was saved for."},
+	{"CHRONOS_API_KEY", "API key. Overrides the login saved by chronos auth login."},
+	{"CHRONOS_BASE_URL", "API base URL. Defaults to https://api.chronos.sh. A saved login is only sent to the base URL it was saved for."},
 	{"CHRONOS_CONFIG_DIR", "Where chronos saves its config. Defaults to $XDG_CONFIG_HOME/chronos, then ~/.config/chronos, or the user config directory on Windows."},
 	{"NO_COLOR", "Set to any value to turn off color."},
 }
