@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>{{.Title}} | chronos</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 32px 16px; background: #0b0a09; color: #e7e4de; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  .col { width: 100%; max-width: 448px; display: flex; flex-direction: column; align-items: center; gap: 32px; }
+  .mark { display: flex; align-items: baseline; gap: 6px; }
+  .mark-text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 30px; line-height: 36px; font-weight: 500; color: #fafafa; }
+  .mark-bar { display: inline-block; width: 12px; height: 3px; background: #e8a04a; transform: translateY(2px); }
+  .card { width: 100%; padding: 24px; background: #151412; border: 1px solid #343230; border-radius: 8px; box-shadow: 0 1px 2px rgb(0 0 0 / 0.05); text-align: center; }
+  .badge { width: 48px; height: 48px; margin: 0 auto 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .badge svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .tone-neutral { background: #272522; color: #a5a29c; }
+  .tone-error { background: rgb(234 110 102 / 0.1); color: #ea6e66; }
+  .tone-warning { background: rgb(239 152 81 / 0.1); color: #ef9851; }
+  .title { margin: 0 0 8px; font-size: 24px; line-height: 1.2; font-weight: 500; letter-spacing: -0.025em; color: #e7e4de; text-wrap: balance; }
+  .text { margin: 0; font-size: 14px; color: #a5a29c; text-wrap: pretty; }
+</style>
+</head>
+<body>
+  <div class="col">
+    <div class="mark"><span class="mark-text">chronos</span><span class="mark-bar" aria-hidden="true"></span></div>
+    <main class="card">
+      <div class="badge tone-{{.Tone}}">
+        {{- if eq .Icon "check"}}<svg class="icon-check" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m16 9-5.5 5.5L8 12"/></svg>
+        {{- else if eq .Icon "minus"}}<svg class="icon-minus" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
+        {{- else if eq .Icon "cross"}}<svg class="icon-cross" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+        {{- else if eq .Icon "alert"}}<svg class="icon-alert" viewBox="0 0 24 24" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        {{- end}}
+      </div>
+      <h1 class="title">{{.Title}}</h1>
+      <p class="text">{{.Text}}</p>
+    </main>
+  </div>
+</body>
+</html>
