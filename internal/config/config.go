@@ -342,13 +342,13 @@ func CheckBaseURL(raw string) error {
 	if err != nil || u.Host == "" {
 		return exit.Usagef("The base URL %q is not a valid URL.", raw)
 	}
-	if u.Scheme == "https" || (u.Scheme == "http" && isLoopback(u.Hostname())) {
+	if u.Scheme == "https" || (u.Scheme == "http" && IsLoopback(u.Hostname())) {
 		return nil
 	}
 	return exit.Usagef("The base URL %q must use https. Plain http is allowed only for localhost.", raw)
 }
 
-func isLoopback(host string) bool {
+func IsLoopback(host string) bool {
 	if host == "localhost" {
 		return true
 	}

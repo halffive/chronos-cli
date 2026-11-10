@@ -18,6 +18,7 @@ import (
 	"chronos.sh/cli/internal/exit"
 	"chronos.sh/cli/internal/oauth"
 	"chronos.sh/cli/internal/output"
+	"chronos.sh/cli/internal/ping"
 	"chronos.sh/cli/internal/transport"
 )
 
@@ -29,6 +30,9 @@ type IOStreams struct {
 	InTTY  bool
 	OutTTY bool
 	ErrTTY bool
+	// HasControllingTerminal is false when no terminal can signal the
+	// process, as under cron or systemd, and always on Windows.
+	HasControllingTerminal bool
 	// Width is the terminal width of Out, or 0.
 	Width int
 	// ReadSecret reads one line from the terminal without echoing it.
@@ -54,6 +58,9 @@ type Factory struct {
 	// LoginTimeout bounds the wait for the browser login. Zero is
 	// DefaultLoginTimeout.
 	LoginTimeout time.Duration
+	// PingTimeout bounds each ping, retries included. Zero is
+	// ping.DefaultTimeout.
+	PingTimeout time.Duration
 
 	JSON    bool
 	BaseURL string
@@ -185,6 +192,14 @@ func (f *Factory) OAuthClient(baseURL string) (*oauth.Client, error) {
 		HTTPClient: &http.Client{Transport: f.transport(), Timeout: chronos.DefaultRequestTimeout},
 		UserAgent:  userAgent(),
 	}, nil
+}
+
+func (f *Factory) PingClient() *ping.Client {
+	return &ping.Client{
+		HTTPClient: &http.Client{Transport: f.transport()},
+		UserAgent:  userAgent(),
+		Timeout:    f.PingTimeout,
+	}
 }
 
 func (f *Factory) transport() *transport.Recorder {

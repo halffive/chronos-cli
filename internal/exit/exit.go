@@ -80,6 +80,13 @@ func (e *Error) Error() string { return e.Message }
 
 func (e *Error) Unwrap() error { return e.Cause }
 
+// ChildExit is the exit code of a command chronos ran for the user, as
+// monitors exec does. root.Execute exits with Code and prints nothing, since
+// the command has already reported its own failure.
+type ChildExit struct{ Code Code }
+
+func (e *ChildExit) Error() string { return fmt.Sprintf("the command exited %d", e.Code) }
+
 func Failuref(format string, args ...any) *Error {
 	return &Error{Exit: Failure, Code: CodeError, Message: fmt.Sprintf(format, args...)}
 }

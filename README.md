@@ -1,6 +1,6 @@
 # chronos
 
-The command-line interface for [Chronos](https://chronos.sh). Create and run schedules, start one-off jobs, see what ran and what failed, and monitor cron jobs and scripts that run outside Chronos. Every subcommand of `schedules`, `jobs`, `executions`, `monitors` and `auth` prints JSON with `--json`, and every command exits with a code listed in `chronos help exit-codes`, so scripts and coding agents can drive it as well as people.
+The command-line interface for [Chronos](https://chronos.sh). Create and run schedules, start one-off jobs, see what ran and what failed, and monitor cron jobs and scripts that run outside Chronos. Every subcommand of `schedules`, `jobs`, `executions`, `monitors` and `auth` prints JSON with `--json`, and every command exits with a code listed in `chronos help exit-codes`, so scripts and coding agents can drive it as well as people. The exception is `chronos monitors exec`, which wraps a cron job or script. Only the command it runs writes to stdout, and `chronos` exits with that command's code.
 
 ## Install
 

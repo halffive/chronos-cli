@@ -220,7 +220,7 @@ func TestSaveKeepsAnExistingDirectorysMode(t *testing.T) {
 }
 
 func TestCheckBaseURLBypasses(t *testing.T) {
-	for _, bad := range []string{"HTTP://evil.example", "http://localhost.attacker.example", "http://127.0.0.1.nip.io", "http://[::1%25lo0]:3000", "http://0.0.0.0", "//evil.com"} {
+	for _, bad := range []string{"HTTP://evil.example", "http://localhost.attacker.example", "http://api.localhost:3000", "http://127.0.0.1.nip.io", "http://[::1%25lo0]:3000", "http://0.0.0.0", "//evil.com"} {
 		if err := config.CheckBaseURL(bad); err == nil {
 			t.Errorf("CheckBaseURL(%q) succeeded, want an error", bad)
 		}

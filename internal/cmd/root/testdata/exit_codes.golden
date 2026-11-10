@@ -1,6 +1,7 @@
-chronos exits with one of these codes. With --json, the error object on stderr
-also has a "code" string and a "retryable" boolean, which is true when
-running the same command again is safe.
+chronos exits with one of these codes, except monitors exec, which exits with
+the command's own code. With --json, the error object on stderr also has a
+"code" string and a "retryable" boolean, which is true when running the
+same command again is safe.
 
   0    Success, including --dry-run.
   1    Any other failure.
