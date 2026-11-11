@@ -22,6 +22,7 @@ func timedOut(t *testing.T) string {
 		"id":            "0192f3a3-0000-7000-8000-000000000005",
 		"status":        "timeout",
 		"trigger":       "system_retry",
+		"attempt":       2,
 		"duration_ms":   30000,
 		"response_code": nil,
 		"error":         "Handler did not respond within 30s.\nThe connection was closed after the timeout and the attempt counted as failed.",
