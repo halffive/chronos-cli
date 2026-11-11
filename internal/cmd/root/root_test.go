@@ -297,6 +297,20 @@ func TestUnknownCommandSuggestionIsInTheJSONMessage(t *testing.T) {
 	}
 }
 
+func TestChildExitCodePassesThroughSilently(t *testing.T) {
+	child := func(f *app.Factory, root *cobra.Command) {
+		root.AddCommand(cmdutil.NewCommand(f, cmdutil.CommandSpec{Use: "child"}, func(context.Context, *cobra.Command, []string) (output.View, error) {
+			return nil, &exit.ChildExit{Code: 42}
+		}))
+	}
+	for _, args := range [][]string{{"child"}, {"--json", "child"}} {
+		res := clitest.Run(t, clitest.Options{Args: args, Extend: child})
+		if res.Code != 42 || res.Stderr != "" || res.Stdout != "" {
+			t.Errorf("%v: exit %d, stdout %q, stderr %q; want 42 and nothing printed", args, res.Code, res.Stdout, res.Stderr)
+		}
+	}
+}
+
 func TestUserAgent(t *testing.T) {
 	api := clitest.NewAPI(t, clitest.OK(clitest.Fixture("schedule")))
 	runProbe(t, api.Env(), "probe", "read", "s1")

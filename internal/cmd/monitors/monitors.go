@@ -18,6 +18,7 @@ func NewCmd(f *app.Factory) *cobra.Command {
 		newResumeCmd(f),
 		newRotatePingURLCmd(f),
 		newListPingsCmd(f),
+		newExecCmd(f),
 		newDeleteCmd(f),
 	)
 	return cmd

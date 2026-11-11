@@ -96,6 +96,9 @@ func Execute(ctx context.Context, f *app.Factory, cmd *cobra.Command, args []str
 	if err == nil {
 		return exit.OK
 	}
+	if child, ok := errors.AsType[*exit.ChildExit](err); ok {
+		return child.Code
+	}
 	if _, ok := errors.AsType[*flagParseError](err); ok {
 		f.JSON = f.JSON || wantsJSON(args)
 	}

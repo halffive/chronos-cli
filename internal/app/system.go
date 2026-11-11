@@ -16,24 +16,31 @@ func NewSystemFactory() *Factory {
 	return &Factory{IO: systemIO(), Getenv: os.Getenv, Now: time.Now, Keychain: config.SystemKeychain{}, OpenBrowser: OpenBrowser}
 }
 
+// InterruptSignals are the signals that cancel a run. It leaves out any signal
+// the process started with ignored, as under nohup or in a script's background
+// job, because catching that signal would make chronos, and every command it
+// runs, stop ignoring it.
 func InterruptSignals() []os.Signal {
-	signals := []os.Signal{os.Interrupt, syscall.SIGTERM}
-	if signal.Ignored(syscall.SIGHUP) {
-		return signals
+	var signals []os.Signal
+	for _, sig := range []os.Signal{os.Interrupt, syscall.SIGTERM, syscall.SIGHUP} {
+		if !signal.Ignored(sig) {
+			signals = append(signals, sig)
+		}
 	}
-	return append(signals, syscall.SIGHUP)
+	return signals
 }
 
 func systemIO() *IOStreams {
 	inFd, outFd := int(os.Stdin.Fd()), int(os.Stdout.Fd())
 	streams := &IOStreams{
-		In:         os.Stdin,
-		Out:        os.Stdout,
-		ErrOut:     os.Stderr,
-		InTTY:      term.IsTerminal(inFd),
-		OutTTY:     term.IsTerminal(outFd),
-		ErrTTY:     term.IsTerminal(int(os.Stderr.Fd())),
-		ReadSecret: func(ctx context.Context) (string, error) { return readSecret(ctx, inFd) },
+		In:                     os.Stdin,
+		Out:                    os.Stdout,
+		ErrOut:                 os.Stderr,
+		InTTY:                  term.IsTerminal(inFd),
+		OutTTY:                 term.IsTerminal(outFd),
+		ErrTTY:                 term.IsTerminal(int(os.Stderr.Fd())),
+		HasControllingTerminal: hasControllingTerminal(),
+		ReadSecret:             func(ctx context.Context) (string, error) { return readSecret(ctx, inFd) },
 	}
 	if width, _, err := term.GetSize(outFd); err == nil {
 		streams.Width = width

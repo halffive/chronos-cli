@@ -1,0 +1,21 @@
+Run a command and report it to a heartbeat monitor. chronos sends a start ping, runs the command, then sends its exit code and the last 10 KB of its output, and exits with the command's exit code. The command keeps your stdin. Its stdout and stderr pass through chronos to yours, so the command sees a pipe, not a terminal. With --no-ping-body, or without a ping URL, the command gets your stdout and stderr directly.
+
+A ping that fails, or a missing ping URL, prints a line on stderr and never stops the command or changes its exit code.
+
+Flags after the command belong to the command.
+
+Usage:
+  chronos monitors exec [flags] [--] <command> [args...]
+
+Examples:
+  CHRONOS_PING_URL=https://ping.chronos.sh/<token> chronos monitors exec -- /usr/local/bin/backup.sh
+  chronos monitors exec --ping-url https://ping.chronos.sh/<token> -- /usr/local/bin/backup.sh
+  chronos monitors exec --no-ping-body pg_dump -f /backups/app.sql app
+
+Flags:
+      --no-ping-body      Keep the command's output out of the pings
+      --ping-url string   The monitor's ping URL; defaults to CHRONOS_PING_URL
+
+Global Flags:
+  -h, --help   Show help for a command
+      --json   Print JSON on stdout, and errors as JSON on stderr

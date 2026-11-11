@@ -19,6 +19,7 @@ Scripts and agents:
   Set CHRONOS_API_KEY to use a key without logging in.
   For JSON on stdout, add --json to a subcommand of schedules, jobs, executions, monitors or auth,
   or to version, exit-codes or environment. Errors then go to stderr as {"error": {...}}.
+  monitors exec prints no JSON on stdout, since stdout is the command's, and exits with the command's code.
   Schedules, jobs and monitors commands that change something accept --dry-run, which prints the request and sends nothing.
   chronos prompts only in a terminal and never with --json. Pass --yes to confirm a delete.
   Run chronos help exit-codes to see what each exit code means.
@@ -40,13 +41,14 @@ var variables = []variableJSON{
 	{"CHRONOS_API_KEY", "API key. Overrides the login saved by chronos auth login."},
 	{"CHRONOS_BASE_URL", "API base URL. Defaults to https://api.chronos.sh. A saved login is only sent to the base URL it was saved for."},
 	{"CHRONOS_CONFIG_DIR", "Where chronos saves its config. Defaults to $XDG_CONFIG_HOME/chronos, then ~/.config/chronos, or the user config directory on Windows."},
+	{"CHRONOS_PING_URL", "Ping URL for chronos monitors exec. Other users on the machine can read a command line, so on a shared machine set it in the crontab, a systemd EnvironmentFile or a script only you can read."},
 	{"NO_COLOR", "Set to any value to turn off color."},
 }
 
 func exitCodesTopic(f *app.Factory) *cobra.Command {
 	var codes []exitCodeJSON
 	var b strings.Builder
-	b.WriteString("chronos exits with one of these codes. With --json, the error object on stderr\nalso has a \"code\" string and a \"retryable\" boolean, which is true when\nrunning the same command again is safe.\n\n")
+	b.WriteString("chronos exits with one of these codes, except monitors exec, which exits with\nthe command's own code. With --json, the error object on stderr also has a\n\"code\" string and a \"retryable\" boolean, which is true when running the\nsame command again is safe.\n\n")
 	for _, d := range exit.Codes() {
 		codes = append(codes, exitCodeJSON{d.Code, d.Meaning})
 		fmt.Fprintf(&b, "  %-4d %s\n", d.Code, d.Meaning)

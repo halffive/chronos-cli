@@ -167,6 +167,7 @@ type Options struct {
 	In        io.Reader
 	StdinTTY  bool
 	StdoutTTY bool
+	StderrTTY bool
 	Width     int
 	// Secret is what a hidden prompt reads.
 	Secret string
@@ -186,6 +187,9 @@ type Options struct {
 	// LoginTimeout defaults to five seconds, so a test that waits for a
 	// browser that never answers fails quickly.
 	LoginTimeout time.Duration
+	// PingTimeout defaults to two seconds, so a ping to a server that never
+	// answers fails quickly.
+	PingTimeout time.Duration
 }
 
 type Result struct {
@@ -206,6 +210,10 @@ func Run(t *testing.T, opts Options) Result {
 	if loginTimeout == 0 {
 		loginTimeout = 5 * time.Second
 	}
+	pingTimeout := opts.PingTimeout
+	if pingTimeout == 0 {
+		pingTimeout = 2 * time.Second
+	}
 	ctx := opts.Context
 	if ctx == nil {
 		ctx = t.Context()
@@ -222,6 +230,7 @@ func Run(t *testing.T, opts Options) Result {
 			ErrOut: &stderr,
 			InTTY:  opts.StdinTTY,
 			OutTTY: opts.StdoutTTY,
+			ErrTTY: opts.StderrTTY,
 			Width:  opts.Width,
 			ReadSecret: func(context.Context) (string, error) {
 				return opts.Secret, nil
@@ -234,6 +243,7 @@ func Run(t *testing.T, opts Options) Result {
 		Keychain:        opts.Keychain,
 		OpenBrowser:     opts.Browser,
 		LoginTimeout:    loginTimeout,
+		PingTimeout:     pingTimeout,
 	}
 	if f.Keychain == nil {
 		f.Keychain = &Keychain{}
