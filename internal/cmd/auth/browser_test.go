@@ -116,13 +116,7 @@ func TestLoginWithTheBrowser(t *testing.T) {
 	if len(b.visits) != 1 {
 		t.Fatalf("the browser visited the listener %d times, want 1", len(b.visits))
 	}
-	page := b.visits[0]
-	if page.status != 200 || !strings.Contains(page.body, "Login approved") || strings.Contains(page.body, "<script") {
-		t.Errorf("page = %d %q", page.status, page.body)
-	}
-	if page.header.Get("Referrer-Policy") != "no-referrer" || !strings.HasPrefix(page.header.Get("Content-Security-Policy"), "default-src 'none'") {
-		t.Errorf("page headers = %v", page.header)
-	}
+	assertPage(t, b.visits[0], approvedPage)
 
 	tokens := b.api.Tokens()
 	if len(tokens) != 1 {
@@ -138,6 +132,56 @@ func TestLoginWithTheBrowser(t *testing.T) {
 	for _, want := range []string{`"type": "oauth_token"`, `"email": "ada@example.com"`, `"expires_at": "2027-01-26T12:00:00Z"`} {
 		if !strings.Contains(file, want) {
 			t.Errorf("config.json lacks %s:\n%s", want, file)
+		}
+	}
+}
+
+type callbackPage struct {
+	status int
+	title  string
+	text   string
+	tone   string
+	icon   string
+}
+
+var (
+	approvedPage = callbackPage{status: 200, title: "CLI login approved", text: "Return to your terminal to finish logging in. You can close this tab.", tone: "neutral", icon: "check"}
+	deniedPage   = callbackPage{status: 400, title: "CLI login denied", text: "Nothing was saved. You can close this tab.", tone: "neutral", icon: "minus"}
+	failedPage   = callbackPage{status: 400, title: "CLI login failed", text: "Nothing was saved. Return to your terminal to see why.", tone: "error", icon: "cross"}
+	ignoredPage  = callbackPage{status: 400, title: "CLI login not recognized", text: "The CLI is not waiting for this login. Check your terminal for the one it is waiting for.", tone: "warning", icon: "alert"}
+)
+
+func assertPage(t *testing.T, got pageVisit, want callbackPage) {
+	t.Helper()
+	if got.status != want.status {
+		t.Errorf("page status = %d, want %d", got.status, want.status)
+	}
+	for _, s := range []string{
+		"<title>" + want.title + " | chronos</title>",
+		`<h1 class="title">` + want.title + "</h1>",
+		`<p class="text">` + want.text + "</p>",
+		`<div class="badge tone-` + want.tone + `">`,
+		`<svg class="icon-` + want.icon + `"`,
+	} {
+		if !strings.Contains(got.body, s) {
+			t.Errorf("page lacks %s:\n%s", s, got.body)
+		}
+	}
+	for _, external := range []string{"<script", "<link", "src=", "url(", "@import"} {
+		if strings.Contains(got.body, external) {
+			t.Errorf("page contains %s, which the CSP blocks:\n%s", external, got.body)
+		}
+	}
+	headers := map[string]string{
+		"Content-Type":            "text/html; charset=utf-8",
+		"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'none'; base-uri 'none'",
+		"Referrer-Policy":         "no-referrer",
+		"Cache-Control":           "no-store",
+		"X-Content-Type-Options":  "nosniff",
+	}
+	for name, value := range headers {
+		if got.header.Get(name) != value {
+			t.Errorf("%s = %q, want %q", name, got.header.Get(name), value)
 		}
 	}
 }
@@ -163,24 +207,28 @@ func TestBrowserLoginFailuresSaveNothing(t *testing.T) {
 		browser func(t *testing.T, b *browserLogin) func(string) error
 		exit    exit.Code
 		message string
+		page    *callbackPage
 	}{
 		{
 			name:    "a login from another issuer",
 			setup:   func(b *browserLogin) { b.api.Issuer = "https://attacker.example" },
 			exit:    exit.Failure,
 			message: `did not come from ` + "http://127.0.0.1",
+			page:    &failedPage,
 		},
 		{
 			name:    "denied in the browser",
 			setup:   func(b *browserLogin) { b.api.Deny = true },
 			exit:    exit.Failure,
 			message: "The login was denied in the browser, so nothing was saved.",
+			page:    &deniedPage,
 		},
 		{
 			name:    "a code the API refuses",
 			setup:   func(b *browserLogin) { b.api.TokenError = "invalid_grant" },
 			exit:    exit.Auth,
 			message: "The API did not accept the login code",
+			page:    &approvedPage,
 		},
 		{
 			name: "no browser",
@@ -202,6 +250,7 @@ func TestBrowserLoginFailuresSaveNothing(t *testing.T) {
 			},
 			exit:    exit.Failure,
 			message: "The login timed out",
+			page:    &ignoredPage,
 		},
 	}
 	for _, tt := range tests {
@@ -224,6 +273,13 @@ func TestBrowserLoginFailuresSaveNothing(t *testing.T) {
 			}
 			b.assertNothingSaved(t)
 			b.assertNoToken(t, res)
+			if tt.page == nil {
+				return
+			}
+			if len(b.visits) != 1 {
+				t.Fatalf("the browser visited the listener %d times, want 1", len(b.visits))
+			}
+			assertPage(t, b.visits[0], *tt.page)
 		})
 	}
 }
@@ -238,9 +294,7 @@ func TestBrowserLoginSaysWhenItIgnoresARequest(t *testing.T) {
 		return approve(authorizeURL)
 	}})
 	clitest.WantExit(t, res, exit.OK)
-	if b.visits[0].status != 400 || !strings.Contains(b.visits[0].body, "Login not recognized") {
-		t.Errorf("first page = %d %q, want the page for a request that is not this login", b.visits[0].status, b.visits[0].body)
-	}
+	assertPage(t, b.visits[0], ignoredPage)
 	if res.Stdout != "Logged in as ada@example.com to Acme.\n" {
 		t.Errorf("stdout = %q", res.Stdout)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
+	_ "embed"
 	"errors"
 	"html/template"
 	"io"
@@ -128,7 +129,7 @@ func (cb *callback) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	result := cb.read(q)
 	cb.result <- result
 	if result.err != nil {
-		writePage(w, http.StatusBadRequest, failedPage)
+		writePage(w, http.StatusBadRequest, errorPage(result.err))
 		return
 	}
 	writePage(w, http.StatusOK, approvedPage)
@@ -158,22 +159,29 @@ func (cb *callback) read(q url.Values) callbackResult {
 type page struct {
 	Title string
 	Text  string
+	Tone  string
+	Icon  string
 }
 
 var (
-	approvedPage = page{"Login approved", "Return to your terminal to finish logging in to Chronos. You can close this tab."}
-	failedPage   = page{"Login failed", "Nothing was saved. Return to your terminal to see why."}
-	ignoredPage  = page{"Login not recognized", "chronos is not waiting for this login. If you started a new login, approve it in the tab chronos opened last."}
+	approvedPage = page{Title: "CLI login approved", Text: "Return to your terminal to finish logging in. You can close this tab.", Tone: "neutral", Icon: "check"}
+	deniedPage   = page{Title: "CLI login denied", Text: "Nothing was saved. You can close this tab.", Tone: "neutral", Icon: "minus"}
+	failedPage   = page{Title: "CLI login failed", Text: "Nothing was saved. Return to your terminal to see why.", Tone: "error", Icon: "cross"}
+	ignoredPage  = page{Title: "CLI login not recognized", Text: "The CLI is not waiting for this login. Check your terminal for the one it is waiting for.", Tone: "warning", Icon: "alert"}
 )
 
-var pageTemplate = template.Must(template.New("page").Parse(`<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><title>{{.Title}}</title>
-<style>body{font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem;line-height:1.5}</style>
-</head>
-<body><h1>{{.Title}}</h1><p>{{.Text}}</p></body>
-</html>
-`))
+//go:embed callback.html
+var pageHTML string
+
+var pageTemplate = template.Must(template.New("page").Parse(pageHTML))
+
+func errorPage(err error) page {
+	var e *exit.Error
+	if errors.As(err, &e) && e.Code == "access_denied" {
+		return deniedPage
+	}
+	return failedPage
+}
 
 func writePage(w http.ResponseWriter, status int, p page) {
 	h := w.Header()
