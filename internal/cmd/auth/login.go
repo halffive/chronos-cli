@@ -99,7 +99,7 @@ func checkLoginFlags(f *app.Factory, flags loginFlags) error {
 	case flags.pasteKey && !interactive:
 		return exit.Usagef("--paste-key asks for the key only in a terminal and never with --json. Pipe the key in with --with-key, or set CHRONOS_API_KEY instead of logging in.")
 	case !flags.withKey && !flags.pasteKey && !interactive:
-		return exit.Usagef("chronos auth login opens the browser only from a terminal and never with --json. Pipe an API key in with --with-key, or set CHRONOS_API_KEY instead of logging in.")
+		return exit.Usagef("Browser login runs only from a terminal and never with --json. Pipe an API key in with --with-key, or set CHRONOS_API_KEY instead of logging in.")
 	}
 	return nil
 }
@@ -146,7 +146,8 @@ func loginWithKey(ctx context.Context, f *app.Factory, target loginTarget, fromS
 	if err != nil {
 		return nil, config.SaveResult{}, err
 	}
-	return statusView(saved.Credentials, account), saved, nil
+	message := fmt.Sprintf("Logged in to %s with API key %s.", output.CleanLine(account.Name), keyHint(saved.Credentials.Secret))
+	return loggedInView(statusOf(saved.Credentials, account), message), saved, nil
 }
 
 func loginWithBrowser(ctx context.Context, f *app.Factory, target loginTarget) (output.View, config.SaveResult, error) {
@@ -193,12 +194,13 @@ func loginWithBrowser(ctx context.Context, f *app.Factory, target loginTarget) (
 		client.RevokeBestEffort(ctx, token.AccessToken)
 		return nil, config.SaveResult{}, err
 	}
-	return loggedInView(saved.Credentials), saved, nil
+	message := fmt.Sprintf("Logged in as %s to %s.", output.CleanLine(saved.Credentials.Grant.User.Email), output.CleanLine(saved.Credentials.Grant.Account.Name))
+	return loggedInView(nil, message), saved, nil
 }
 
-func loggedInView(creds config.Credentials) output.View {
-	return output.ViewOf(nil, func(p *output.Printer) error {
-		_, err := fmt.Fprintf(p.Out, "Logged in as %s to %s.\n", output.CleanLine(creds.Grant.User.Email), output.CleanLine(creds.Grant.Account.Name))
+func loggedInView(status any, message string) output.View {
+	return output.ViewOf(status, func(p *output.Printer) error {
+		_, err := fmt.Fprintln(p.Out, message)
 		return err
 	})
 }

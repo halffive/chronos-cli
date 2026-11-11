@@ -121,10 +121,37 @@ func GroupArgs(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 	msg := fmt.Sprintf("Unknown command %q for %q.", args[0], cmd.CommandPath())
-	if suggestions := cmd.SuggestionsFor(args[0]); len(suggestions) > 0 {
+	if suggestions := suggestCommands(cmd, args[0]); len(suggestions) > 0 {
 		msg += fmt.Sprintf(" Did you mean %s?", strings.Join(suggestions, " or "))
 	}
 	return exit.Usagef("%s", msg)
+}
+
+const suggestionDistance = 2
+
+func suggestCommands(cmd *cobra.Command, typed string) []string {
+	if cmd.SuggestionsMinimumDistance <= 0 {
+		cmd.SuggestionsMinimumDistance = suggestionDistance
+	}
+	var paths []string
+	for _, name := range cmd.SuggestionsFor(typed) {
+		paths = append(paths, cmd.CommandPath()+" "+name)
+	}
+	if len(paths) > 0 {
+		return paths
+	}
+	for _, child := range cmd.Commands() {
+		if !child.IsAvailableCommand() {
+			continue
+		}
+		for _, grandchild := range child.Commands() {
+			if !grandchild.IsAvailableCommand() || !strings.EqualFold(grandchild.Name(), typed) {
+				continue
+			}
+			paths = append(paths, grandchild.CommandPath())
+		}
+	}
+	return paths
 }
 
 // ExactArgs requires one positional argument per name, such as ExactArgs("id").
@@ -134,7 +161,7 @@ func ExactArgs(names ...string) cobra.PositionalArgs {
 			return nil
 		}
 		want := "<" + strings.Join(names, "> <") + ">"
-		return exit.Usagef("%s takes %s. You passed %d.", cmd.CommandPath(), want, len(args))
+		return exit.Usagef("Wrong number of arguments. %s takes %s, and you passed %d.", cmd.CommandPath(), want, len(args))
 	}
 }
 

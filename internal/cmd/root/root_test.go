@@ -263,6 +263,40 @@ func TestUsageErrors(t *testing.T) {
 	}
 }
 
+func TestUnknownCommandSuggestsTheClosestCommand(t *testing.T) {
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{[]string{"scehdules"}, `Unknown command "scehdules" for "chronos". Did you mean chronos schedules?`},
+		{[]string{"shedules"}, `Unknown command "shedules" for "chronos". Did you mean chronos schedules?`},
+		{[]string{"jobs", "lst"}, `Unknown command "lst" for "chronos jobs". Did you mean chronos jobs list or chronos jobs get?`},
+		{[]string{"schedules", "pasue"}, `Unknown command "pasue" for "chronos schedules". Did you mean chronos schedules pause?`},
+		{[]string{"auth", "logn"}, `Unknown command "logn" for "chronos auth". Did you mean chronos auth login?`},
+		{[]string{"status"}, `Unknown command "status" for "chronos". Did you mean chronos auth status?`},
+		{[]string{"list"}, `Unknown command "list" for "chronos". Did you mean chronos executions list or chronos jobs list or chronos monitors list or chronos schedules list?`},
+		{[]string{"stauts"}, `Unknown command "stauts" for "chronos".`},
+		{[]string{"zzz"}, `Unknown command "zzz" for "chronos".`},
+		{[]string{"jobs", "get"}, `Wrong number of arguments. chronos jobs get takes <id>, and you passed 0.`},
+	}
+	for _, tt := range tests {
+		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
+			res := clitest.Run(t, clitest.Options{Args: tt.args})
+			if res.Code != exit.Usage || !strings.HasPrefix(res.Stderr, "Error: "+tt.want+"\n") {
+				t.Errorf("exit = %d, stderr = %q; want %d and Error: %s", res.Code, res.Stderr, exit.Usage, tt.want)
+			}
+		})
+	}
+}
+
+func TestUnknownCommandSuggestionIsInTheJSONMessage(t *testing.T) {
+	res := clitest.Run(t, clitest.Options{Args: []string{"--json", "status"}})
+	got := clitest.DecodeError(t, res.Stderr)
+	if res.Code != exit.Usage || got.Code != exit.CodeUsage || !strings.HasSuffix(got.Message, "Did you mean chronos auth status?") {
+		t.Errorf("exit = %d, error = %+v", res.Code, got)
+	}
+}
+
 func TestUserAgent(t *testing.T) {
 	api := clitest.NewAPI(t, clitest.OK(clitest.Fixture("schedule")))
 	runProbe(t, api.Env(), "probe", "read", "s1")
