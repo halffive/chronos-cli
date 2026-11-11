@@ -22,6 +22,7 @@ func timedOut(t *testing.T) string {
 		"id":            "0192f3a3-0000-7000-8000-000000000005",
 		"status":        "timeout",
 		"trigger":       "system_retry",
+		"attempt":       2,
 		"duration_ms":   30000,
 		"response_code": nil,
 		"error":         "Handler did not respond within 30s.\nThe connection was closed after the timeout and the attempt counted as failed.",
@@ -44,13 +45,14 @@ func terminal(t *testing.T, api *clitest.API, args ...string) clitest.Result {
 func TestListJSON(t *testing.T) {
 	api := clitest.NewAPI(t, clitest.Page("["+timedOut(t)+"]", chronos.Paging{Page: 1, Pages: 1, Size: 20, Total: 1}))
 	res := run(t, api.Env(), "--json", "executions", "list",
-		"--job-id", "0192f3a2-0000-7000-8000-000000000003", "--schedule-id", "null", "--handler", "report",
+		"--job-id", "0192f3a2-0000-7000-8000-000000000003", "--origin", "api", "--search", "nightly", "--handler", "report",
 		"--status", "timeout", "--created-after", "1h", "--created-before", "2026-10-28T11:30:00Z", "--size", "50")
 	clitest.WantExit(t, res, exit.OK)
 	clitest.Golden(t, "list", res.Stdout)
 	want := url.Values{
 		"job_id":         {"0192f3a2-0000-7000-8000-000000000003"},
-		"schedule_id":    {"null"},
+		"origin":         {"api"},
+		"search":         {"nightly"},
 		"handler":        {"report"},
 		"status":         {"timeout"},
 		"created_after":  {"2026-10-28T11:00:00Z"},

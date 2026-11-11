@@ -13,17 +13,17 @@ import (
 
 func newListCmd(f *app.Factory) *cobra.Command {
 	var params chronos.ExecutionListParams
-	var scheduleID, status string
+	var origin, status string
 	var all bool
 	spec := cmdutil.CommandSpec{
 		Use:   "list",
 		Short: "List executions, newest first",
 		Example: "  chronos executions list --status failed --created-after 24h\n" +
 			"  chronos executions list --job-id <id> --json\n" +
-			"  chronos executions list --schedule-id null --status timeout",
+			"  chronos executions list --origin api --status timeout",
 	}
 	cmd := cmdutil.NewCommand(f, spec, func(ctx context.Context, _ *cobra.Command, _ []string) (output.View, error) {
-		params.ScheduleID = scheduleFilter(scheduleID)
+		params.Origin = chronos.JobOrigin(origin)
 		params.Status = chronos.ExecutionStatus(status)
 		c, err := f.Client()
 		if err != nil {
@@ -43,8 +43,10 @@ func newListCmd(f *app.Factory) *cobra.Command {
 
 	flags := cmd.Flags()
 	flags.StringVar(&params.JobID, "job-id", "", "Only executions of this job")
-	flags.StringVar(&scheduleID, "schedule-id", "", "Only executions of jobs created by this schedule, or null for one-off jobs")
+	flags.StringVar(&params.ScheduleID, "schedule-id", "", "Only executions of jobs created by this schedule")
+	flags.StringVar(&origin, "origin", "", "Only executions of jobs created through the API (api) or by a schedule (schedule)")
 	flags.StringVar(&params.Handler, "handler", "", "Only executions of jobs for this handler")
+	flags.StringVar(&params.Search, "search", "", "Only executions of jobs whose name contains this text, ignoring case. Spawned jobs keep the schedule's name from when they were created; use --schedule-id for one schedule")
 	flags.StringVar(&status, "status", "", "Only executions with this status, such as failed or timeout")
 	flags.Var(cmdutil.NewTimeFilter(&params.CreatedAfter, f.Now), "created-after", "Only executions created at or after this time: RFC 3339, or a duration such as 24h for that long ago")
 	flags.Var(cmdutil.NewTimeFilter(&params.CreatedBefore, f.Now), "created-before", "Only executions created at or before this time: RFC 3339, or a duration such as 24h for that long ago")
@@ -53,15 +55,6 @@ func newListCmd(f *app.Factory) *cobra.Command {
 	flags.BoolVar(&all, "all", false, "List every page")
 	cmd.MarkFlagsMutuallyExclusive("page", "all")
 	_ = cmd.RegisterFlagCompletionFunc("status", cmdutil.CompleteValues(statuses...))
+	_ = cmd.RegisterFlagCompletionFunc("origin", cmdutil.CompleteValues(chronos.JobOriginAPI, chronos.JobOriginSchedule))
 	return cmd
-}
-
-func scheduleFilter(id string) chronos.Nullable[string] {
-	switch id {
-	case "":
-		return chronos.Nullable[string]{}
-	case "null":
-		return chronos.Null[string]()
-	}
-	return chronos.NewNullable(id)
 }
